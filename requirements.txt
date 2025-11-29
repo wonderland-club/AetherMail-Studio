@@ -1,0 +1,5 @@
+Flask==2.3.3
+pypandoc==1.13
+premailer==3.10.0
+python-dotenv==1.0.0
+email-validator==2.1.0
