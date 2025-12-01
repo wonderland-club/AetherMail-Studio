@@ -22,20 +22,24 @@ def check_dependencies():
     """检查依赖包"""
     print("\n📦 检查依赖包...")
     
-    required_packages = [
-        'flask', 'pypandoc', 'premailer', 
-        'python-dotenv', 'email-validator'
-    ]
-    
+    # 使用映射来处理包名与导入名不一致的情况（例如 python-dotenv -> dotenv）
+    required_packages = {
+        'flask': 'flask',
+        'pypandoc': 'pypandoc',
+        'premailer': 'premailer',
+        'python-dotenv': 'dotenv',
+        'email-validator': 'email_validator',
+    }
+
     missing_packages = []
-    
-    for package in required_packages:
+
+    for pkg_name, import_name in required_packages.items():
         try:
-            __import__(package.replace('-', '_'))
-            print(f"✅ {package}")
+            __import__(import_name)
+            print(f"✅ {pkg_name}")
         except ImportError:
-            print(f"❌ {package} (缺失)")
-            missing_packages.append(package)
+            print(f"❌ {pkg_name} (缺失)")
+            missing_packages.append(pkg_name)
     
     if missing_packages:
         print(f"\n💡 安装缺失的依赖包:")
