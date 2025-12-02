@@ -1,0 +1,32 @@
+✅ 邮件配置加载成功: junyan101@qq.com
+🚀 启动Markdown邮件发送系统...
+📧 邮箱配置已加载
+📝 邮件模板已准备就绪
+🌐 API服务器启动中...
+ * Serving Flask app 'app'
+ * Debug mode: on
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://198.18.0.1:5000
+[33mPress CTRL+C to quit[0m
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 131-761-629
+✅ 邮件配置加载成功: junyan101@qq.com
+🚀 启动Markdown邮件发送系统...
+📧 邮箱配置已加载
+📝 邮件模板已准备就绪
+🌐 API服务器启动中...
+Traceback (most recent call last):
+  File "/Users/schen/Documents/MyProjects/AetherMail-Studio/app.py", line 187, in <module>
+    app.run(host='0.0.0.0', port=5000, debug=True)
+  File "/Users/schen/.pyenv/versions/3.9.2/lib/python3.9/site-packages/flask/app.py", line 889, in run
+    run_simple(t.cast(str, host), port, self, **options)
+  File "/Users/schen/.pyenv/versions/3.9.2/lib/python3.9/site-packages/werkzeug/serving.py", line 1115, in run_simple
+    run_with_reloader(
+  File "/Users/schen/.pyenv/versions/3.9.2/lib/python3.9/site-packages/werkzeug/_reloader.py", line 453, in run_with_reloader
+    ensure_echo_on()
+  File "/Users/schen/.pyenv/versions/3.9.2/lib/python3.9/site-packages/werkzeug/_reloader.py", line 433, in ensure_echo_on
+    termios.tcsetattr(sys.stdin, termios.TCSANOW, attributes)
+termios.error: (4, 'Interrupted system call')
