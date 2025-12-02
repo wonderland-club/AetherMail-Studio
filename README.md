@@ -25,7 +25,18 @@ python start.py
 pip install -r requirements.txt
 ```
 
-2) 配置邮箱
+2) 安装并配置 Pandoc / pypandoc（必读，踩坑提醒）
+- 依赖里已包含 `pypandoc==1.13`，但仍需系统安装 `pandoc` 可执行文件。
+- macOS 安装方式：
+  - 使用 Homebrew：`brew install pandoc`
+  - 或从官方发布页下载并安装：`https://github.com/jgm/pandoc/releases`
+- 如果 `which pandoc` 仍显示未找到，可设置环境变量让 pypandoc直指可执行文件：
+  - `export PYPANDOC_PANDOC=/绝对/路径/到/pandoc`（例如：`/Users/<你>/Applications/pandoc/pandoc`）
+- 验证安装（可直接复制运行）：
+  - `python -c "import pypandoc, os; print('pypandoc_version=', pypandoc.get_pandoc_version()); print('pandoc_path=', pypandoc.get_pandoc_path()); print('ENV_PYPANDOC_PANDOC=', os.environ.get('PYPANDOC_PANDOC'))"`
+- 说明：即使 `PATH` 中没有 `pandoc`，只要 `pypandoc` 能定位到有效的 `pandoc` 路径（或通过 `PYPANDOC_PANDOC` 指定），Markdown → HTML 转换即可正常工作。
+
+3) 配置邮箱
 ```bash
 cp .env.example .env
 ```
@@ -37,14 +48,14 @@ SMTP_USER=your_email@example.com
 SMTP_PASSWORD=your_smtp_authorization_code
 ```
 
-3) 运行基础测试（可选）
+4) 运行基础测试（可选）
 ```bash
 python test_smtp.py
 python test_email.py
 python test_api.py
 ```
 
-4) 启动服务
+5) 启动服务
 ```bash
 python app.py
 ```
