@@ -1,0 +1,14 @@
+name: aethermail
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - flask=2.3.3
+  - pypandoc=1.13
+  - pandoc
+  - python-dotenv=1.0.0
+  - email-validator=2.1.0
+  - pip
+  - pip:
+      - premailer==3.10.0
+      - "volcengine-python-sdk[ark]>=4.0.36"
