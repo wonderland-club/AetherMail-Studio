@@ -1,0 +1,68 @@
+2026-01-28 11:54:15,605 | INFO | app | request_id=- | templates_loaded | count=3
+2026-01-28 11:54:15,606 | INFO | app | request_id=- | smtp_config_loaded
+ * Serving Flask app 'app'
+ * Debug mode: off
+2026-01-28 11:54:15,640 | INFO | werkzeug | request_id=- | [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-01-28 11:54:15,640 | INFO | werkzeug | request_id=- | [33mPress CTRL+C to quit[0m
+2026-01-28 11:56:53,952 | INFO | app | request_id=ff9f0d57835d | stage=request_received | {'endpoint': '/api/send', 'remote_addr': '127.0.0.1', 'content_type': 'application/json', 'content_length': 377}
+2026-01-28 11:56:53,954 | INFO | app | request_id=ff9f0d57835d | stage=parsed_request | {'endpoint': '/api/send', 'template': 'protein_calculation', 'recipient': '2562178620@qq.com', 'cc_recipients': 1, 'request_data_keys': ['activity_level', 'age', 'diet_type', 'female_stage', 'goal', 'height_cm', 'kidney_status', 'lact_stage', 'name', 'on_dialysis', 'preg_trimester', 'sex', 'weight_kg']}
+2026-01-28 11:56:53,955 | INFO | app | request_id=ff9f0d57835d | stage=render_begin | {'endpoint': '/api/send', 'template': 'protein_calculation', 'template_data_keys': ['activity_level', 'age', 'diet_type', 'female_stage', 'goal', 'height_cm', 'kidney_status', 'lact_stage', 'name', 'on_dialysis', 'preg_trimester', 'sex', 'weight_kg']}
+2026-01-28 11:57:21,944 | INFO | httpx | request_id=ff9f0d57835d | HTTP Request: POST https://ark.cn-beijing.volces.com/api/v3/chat/completions "HTTP/1.1 200 OK"
+2026-01-28 11:57:21,949 | INFO | app | request_id=ff9f0d57835d | stage=render_success | {'endpoint': '/api/send', 'template': 'protein_calculation'}
+2026-01-28 11:57:21,950 | INFO | app | request_id=ff9f0d57835d | stage=send_begin | {'endpoint': '/api/send', 'template': 'protein_calculation', 'recipient': '2562178620@qq.com', 'cc_count': 1, 'subject': '「一场」SpaceOne｜你的蛋白质计划已准备好'}
+WARNING	Property: Unknown Property name. [16:7: hyphens]
+2026-01-28 11:57:22,743 | WARNING | CSSUTILS | request_id=ff9f0d57835d | Property: Unknown Property name. [16:7: hyphens]
+WARNING	Property: Unknown Property name. [17:7: overflow-wrap]
+2026-01-28 11:57:22,744 | WARNING | CSSUTILS | request_id=ff9f0d57835d | Property: Unknown Property name. [17:7: overflow-wrap]
+WARNING	Property: Unknown Property name. [18:7: text-rendering]
+2026-01-28 11:57:22,744 | WARNING | CSSUTILS | request_id=ff9f0d57835d | Property: Unknown Property name. [18:7: text-rendering]
+WARNING	Property: Unknown Property name. [19:7: font-kerning]
+2026-01-28 11:57:22,744 | WARNING | CSSUTILS | request_id=ff9f0d57835d | Property: Unknown Property name. [19:7: font-kerning]
+WARNING	Property: Unknown Property name. [90:7: hyphens]
+2026-01-28 11:57:22,757 | WARNING | CSSUTILS | request_id=ff9f0d57835d | Property: Unknown Property name. [90:7: hyphens]
+WARNING	Property: Unknown Property name. [99:7: overflow-wrap]
+2026-01-28 11:57:22,759 | WARNING | CSSUTILS | request_id=ff9f0d57835d | Property: Unknown Property name. [99:7: overflow-wrap]
+WARNING	Property: Unknown Property name. [117:7: font-variant-numeric]
+2026-01-28 11:57:22,762 | WARNING | CSSUTILS | request_id=ff9f0d57835d | Property: Unknown Property name. [117:7: font-variant-numeric]
+ERROR	Property: Invalid value for "CSS Level 2.1" property: flex [152:17: display]
+2026-01-28 11:57:22,771 | ERROR | CSSUTILS | request_id=ff9f0d57835d | Property: Invalid value for "CSS Level 2.1" property: flex [152:17: display]
+WARNING	Property: Unknown Property name. [152:32: gap]
+2026-01-28 11:57:22,771 | WARNING | CSSUTILS | request_id=ff9f0d57835d | Property: Unknown Property name. [152:32: gap]
+WARNING	Property: Unknown Property name. [153:16: flex]
+2026-01-28 11:57:22,772 | WARNING | CSSUTILS | request_id=ff9f0d57835d | Property: Unknown Property name. [153:16: flex]
+ERROR	Property: Invalid value for "CSS Level 2.1" property: 0.5rem auto [164:55: margin]
+2026-01-28 11:57:22,781 | ERROR | CSSUTILS | request_id=ff9f0d57835d | Property: Invalid value for "CSS Level 2.1" property: 0.5rem auto [164:55: margin]
+WARNING	Property: Unknown Property name. [1:104: hyphens]
+2026-01-28 11:57:22,807 | WARNING | CSSUTILS | request_id=ff9f0d57835d | Property: Unknown Property name. [1:104: hyphens]
+WARNING	Property: Unknown Property name. [1:117: overflow-wrap]
+2026-01-28 11:57:22,807 | WARNING | CSSUTILS | request_id=ff9f0d57835d | Property: Unknown Property name. [1:117: overflow-wrap]
+WARNING	Property: Unknown Property name. [1:142: text-rendering]
+2026-01-28 11:57:22,807 | WARNING | CSSUTILS | request_id=ff9f0d57835d | Property: Unknown Property name. [1:142: text-rendering]
+WARNING	Property: Unknown Property name. [1:176: font-kerning]
+2026-01-28 11:57:22,808 | WARNING | CSSUTILS | request_id=ff9f0d57835d | Property: Unknown Property name. [1:176: font-kerning]
+2026-01-28 11:57:22,814 | INFO | src.email_sender | request_id=ff9f0d57835d | [email_sender] markdown_to_html_success
+2026-01-28 11:57:24,244 | INFO | src.email_sender | request_id=ff9f0d57835d | [email_sender] send_success | to=2562178620@qq.com cc=1 subject=「一场」SpaceOne｜你的蛋白质计划已准备好
+2026-01-28 11:57:24,249 | INFO | app | request_id=ff9f0d57835d | request_complete | method=POST path=/api/send status=200 duration_ms=30296
+2026-01-28 11:57:24,250 | INFO | werkzeug | request_id=- | 127.0.0.1 - - [28/Jan/2026 11:57:24] "POST /api/send HTTP/1.1" 200 -
+2026-01-28 12:31:33,846 | INFO | app | request_id=d93b20e1f7cf | stage=request_received | {'endpoint': '/api/send', 'remote_addr': '127.0.0.1', 'content_type': 'application/json', 'content_length': 377}
+2026-01-28 12:31:33,849 | INFO | app | request_id=d93b20e1f7cf | stage=parsed_request | {'endpoint': '/api/send', 'template': 'protein_calculation', 'recipient': '90804207@qq.com', 'cc_recipients': 1, 'request_data_keys': ['activity_level', 'age', 'diet_type', 'female_stage', 'goal', 'height_cm', 'kidney_status', 'lact_stage', 'name', 'on_dialysis', 'preg_trimester', 'sex', 'weight_kg']}
+2026-01-28 12:31:33,849 | INFO | app | request_id=d93b20e1f7cf | stage=render_begin | {'endpoint': '/api/send', 'template': 'protein_calculation', 'template_data_keys': ['activity_level', 'age', 'diet_type', 'female_stage', 'goal', 'height_cm', 'kidney_status', 'lact_stage', 'name', 'on_dialysis', 'preg_trimester', 'sex', 'weight_kg']}
+2026-01-28 12:32:14,800 | INFO | httpx | request_id=d93b20e1f7cf | HTTP Request: POST https://ark.cn-beijing.volces.com/api/v3/chat/completions "HTTP/1.1 200 OK"
+2026-01-28 12:32:14,802 | INFO | app | request_id=d93b20e1f7cf | stage=render_success | {'endpoint': '/api/send', 'template': 'protein_calculation'}
+2026-01-28 12:32:14,802 | INFO | app | request_id=d93b20e1f7cf | stage=send_begin | {'endpoint': '/api/send', 'template': 'protein_calculation', 'recipient': '90804207@qq.com', 'cc_count': 1, 'subject': '「一场」SpaceOne｜你的蛋白质计划已准备好'}
+2026-01-28 12:32:15,982 | INFO | src.email_sender | request_id=d93b20e1f7cf | [email_sender] markdown_to_html_success
+2026-01-28 12:32:17,182 | WARNING | src.email_sender | request_id=d93b20e1f7cf | [email_sender] smtp_exception | (550, b'The recipient may contain a non-existent account, please check the recipient address.')
+2026-01-28 12:32:17,185 | INFO | app | request_id=d93b20e1f7cf | stage=send_failed | {'endpoint': '/api/send', 'template': 'protein_calculation', 'recipient': '90804207@qq.com', 'error': "SMTP错误: (550, b'The recipient may contain a non-existent account, please check the recipient address.')"}
+2026-01-28 12:32:17,185 | INFO | app | request_id=d93b20e1f7cf | request_complete | method=POST path=/api/send status=400 duration_ms=43339
+2026-01-28 12:32:17,186 | INFO | werkzeug | request_id=- | 127.0.0.1 - - [28/Jan/2026 12:32:17] "[31m[1mPOST /api/send HTTP/1.1[0m" 400 -
+2026-01-28 19:12:23,177 | INFO | app | request_id=70b1b348a4a1 | stage=request_received | {'endpoint': '/api/send', 'remote_addr': '127.0.0.1', 'content_type': 'application/json', 'content_length': 378}
+2026-01-28 19:12:23,208 | INFO | app | request_id=70b1b348a4a1 | stage=parsed_request | {'endpoint': '/api/send', 'template': 'protein_calculation', 'recipient': '908014207@qq.com', 'cc_recipients': 1, 'request_data_keys': ['activity_level', 'age', 'diet_type', 'female_stage', 'goal', 'height_cm', 'kidney_status', 'lact_stage', 'name', 'on_dialysis', 'preg_trimester', 'sex', 'weight_kg']}
+2026-01-28 19:12:23,208 | INFO | app | request_id=70b1b348a4a1 | stage=render_begin | {'endpoint': '/api/send', 'template': 'protein_calculation', 'template_data_keys': ['activity_level', 'age', 'diet_type', 'female_stage', 'goal', 'height_cm', 'kidney_status', 'lact_stage', 'name', 'on_dialysis', 'preg_trimester', 'sex', 'weight_kg']}
+2026-01-28 19:12:59,494 | INFO | httpx | request_id=70b1b348a4a1 | HTTP Request: POST https://ark.cn-beijing.volces.com/api/v3/chat/completions "HTTP/1.1 200 OK"
+2026-01-28 19:12:59,497 | INFO | app | request_id=70b1b348a4a1 | stage=render_success | {'endpoint': '/api/send', 'template': 'protein_calculation'}
+2026-01-28 19:12:59,497 | INFO | app | request_id=70b1b348a4a1 | stage=send_begin | {'endpoint': '/api/send', 'template': 'protein_calculation', 'recipient': '908014207@qq.com', 'cc_count': 1, 'subject': '「一场」SpaceOne｜你的蛋白质计划已准备好'}
+2026-01-28 19:13:01,162 | INFO | src.email_sender | request_id=70b1b348a4a1 | [email_sender] markdown_to_html_success
+2026-01-28 19:13:02,508 | INFO | src.email_sender | request_id=70b1b348a4a1 | [email_sender] send_success | to=908014207@qq.com cc=1 subject=「一场」SpaceOne｜你的蛋白质计划已准备好
+2026-01-28 19:13:02,513 | INFO | app | request_id=70b1b348a4a1 | request_complete | method=POST path=/api/send status=200 duration_ms=39336
+2026-01-28 19:13:02,513 | INFO | werkzeug | request_id=- | 127.0.0.1 - - [28/Jan/2026 19:13:02] "POST /api/send HTTP/1.1" 200 -

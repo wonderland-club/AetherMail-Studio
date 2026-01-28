@@ -1,6 +1,7 @@
 """
 邮件发送核心功能
 """
+import logging
 import smtplib
 import ssl
 from email.mime.multipart import MIMEMultipart
@@ -14,10 +15,19 @@ try:
     PREMAILER_AVAILABLE = True
 except ImportError:
     PREMAILER_AVAILABLE = False
-    print("⚠️ Premailer不可用，将使用基础HTML")
+    logging.getLogger(__name__).warning("premailer_unavailable")
 import os
 
-from .config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, DEFAULT_SENDER_NAME
+from .config import (
+    SMTP_SERVER,
+    SMTP_PORT,
+    SMTP_USER,
+    SMTP_PASSWORD,
+    DEFAULT_SENDER_NAME,
+    validate_smtp_config,
+)
+
+logger = logging.getLogger(__name__)
 
 class AttachmentData:
     """附件数据类"""
@@ -29,6 +39,7 @@ class EmailSender:
     """邮件发送器"""
     
     def __init__(self):
+        validate_smtp_config()
         self.smtp_server = SMTP_SERVER
         self.smtp_port = SMTP_PORT
         self.smtp_user = SMTP_USER
@@ -125,14 +136,15 @@ class EmailSender:
                 try:
                     inlined_html = transform(html_with_css)
                 except Exception as premailer_error:
-                    print(f"⚠️ Premailer处理失败，使用原始HTML: {premailer_error}")
+                    logger.warning("premailer_failed | error=%s", premailer_error)
                     inlined_html = html_with_css
             else:
                 inlined_html = html_with_css
-            
+            logger.info("[email_sender] markdown_to_html_success")
             return inlined_html, None
             
         except Exception as e:
+            logger.exception("[email_sender] markdown_to_html_failed")
             return None, f"Markdown转HTML失败: {str(e)}"
     
     def _send_email(self, html_content: str, plain_text: str, mail_recipient: str,
@@ -180,16 +192,25 @@ class EmailSender:
             # 发送邮件
             server.sendmail(self.smtp_user, recipients, msg.as_string())
             server.quit()
-            
+            logger.info(
+                "[email_sender] send_success | to=%s cc=%s subject=%s",
+                mail_recipient,
+                len(cc_recipients or []),
+                subject,
+            )
             return True, "邮件发送成功"
             
         except smtplib.SMTPAuthenticationError as e:
+            logger.warning("[email_sender] smtp_auth_failed | %s", e)
             return False, f"SMTP认证失败，请检查邮箱和授权码: {str(e)}"
         except smtplib.SMTPConnectError as e:
+            logger.warning("[email_sender] smtp_connect_failed | %s", e)
             return False, f"SMTP连接失败，请检查网络连接: {str(e)}"
         except smtplib.SMTPException as e:
+            logger.warning("[email_sender] smtp_exception | %s", e)
             return False, f"SMTP错误: {str(e)}"
         except Exception as e:
+            logger.exception("[email_sender] send_exception")
             return False, f"邮件发送失败: {str(e)}"
     
     def send_markdown_email(self, md_content: str, recipient: str, subject: str,
@@ -200,6 +221,7 @@ class EmailSender:
         # 转换Markdown为HTML
         html_content, error = self._convert_md_to_html(md_content)
         if error:
+            logger.warning("[email_sender] convert_failed | %s", error)
             return False, error
         
         # 发送邮件

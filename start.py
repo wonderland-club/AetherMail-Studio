@@ -4,23 +4,28 @@
 
 这个脚本会自动检查环境配置并启动邮件发送系统。
 """
+import logging
 import os
 import sys
 import subprocess
-import time
+
+from src.config import load_env
+from src.logging_setup import configure_logging
+
+logger = logging.getLogger("start")
 
 def check_python_version():
     """检查Python版本"""
-    print("🐍 检查Python版本...")
+    logger.info("check_python_version")
     if sys.version_info < (3, 7):
-        print("❌ 需要Python 3.7或更高版本")
+        logger.error("python_version_too_low")
         return False
-    print(f"✅ Python版本: {sys.version.split()[0]}")
+    logger.info("python_version_ok | version=%s", sys.version.split()[0])
     return True
 
 def check_dependencies():
     """检查依赖包"""
-    print("\n📦 检查依赖包...")
+    logger.info("check_dependencies")
     
     # 使用映射来处理包名与导入名不一致的情况（例如 python-dotenv -> dotenv）
     required_packages = {
@@ -36,30 +41,27 @@ def check_dependencies():
     for pkg_name, import_name in required_packages.items():
         try:
             __import__(import_name)
-            print(f"✅ {pkg_name}")
+            logger.info("dependency_ok | package=%s", pkg_name)
         except ImportError:
-            print(f"❌ {pkg_name} (缺失)")
+            logger.warning("dependency_missing | package=%s", pkg_name)
             missing_packages.append(pkg_name)
     
     if missing_packages:
-        print(f"\n💡 安装缺失的依赖包:")
-        print(f"   pip install {' '.join(missing_packages)}")
+        logger.error("missing_dependencies | packages=%s", " ".join(missing_packages))
         return False
     
     return True
 
 def check_env_config():
     """检查环境配置"""
-    print("\n⚙️ 检查环境配置...")
+    logger.info("check_env_config")
     
     if not os.path.exists('.env'):
-        print("❌ .env文件不存在")
-        print("💡 请复制.env.example为.env并配置您的邮箱信息")
+        logger.error("env_missing | file=.env")
         return False
     
     # 检查必要的环境变量
-    from dotenv import load_dotenv
-    load_dotenv()
+    load_env()
     
     required_vars = [
         'SMTP_SERVER', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD'
@@ -71,78 +73,72 @@ def check_env_config():
             missing_vars.append(var)
     
     if missing_vars:
-        print(f"❌ 缺失环境变量: {', '.join(missing_vars)}")
-        print("💡 请在.env文件中配置这些变量")
+        logger.error("env_missing_vars | vars=%s", ", ".join(missing_vars))
         return False
     
-    print("✅ 环境配置完整")
+    logger.info("env_ok")
     return True
 
 def check_template_files():
     """检查模板文件"""
-    print("\n📄 检查模板文件...")
+    logger.info("check_template_files")
     
     template_file = "templates/advantages/template.md"
     if not os.path.exists(template_file):
-        print(f"❌ 模板文件不存在: {template_file}")
+        logger.error("template_missing | path=%s", template_file)
         return False
     
-    print(f"✅ 模板文件存在: {template_file}")
+    logger.info("template_ok | path=%s", template_file)
     return True
 
 def run_tests():
     """运行基础测试"""
-    print("\n🧪 运行基础测试...")
+    logger.info("run_tests")
     
     try:
         # 运行SMTP连接测试
         result = subprocess.run([sys.executable, 'test_smtp.py'], 
                               capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
-            print("✅ SMTP连接测试通过")
+            logger.info("test_smtp_ok")
         else:
-            print("❌ SMTP连接测试失败")
-            print(result.stderr)
+            logger.error("test_smtp_failed | stderr=%s", result.stderr.strip())
             return False
         
         # 运行邮件发送测试
         result = subprocess.run([sys.executable, 'test_email.py'], 
                               capture_output=True, text=True, timeout=60)
         if result.returncode == 0:
-            print("✅ 邮件发送测试通过")
+            logger.info("test_email_ok")
         else:
-            print("❌ 邮件发送测试失败")
-            print(result.stderr)
+            logger.error("test_email_failed | stderr=%s", result.stderr.strip())
             return False
         
         return True
         
     except subprocess.TimeoutExpired:
-        print("❌ 测试超时")
+        logger.error("tests_timeout")
         return False
     except Exception as e:
-        print(f"❌ 测试异常: {e}")
+        logger.exception("tests_exception | error=%s", e)
         return False
 
 def start_server():
     """启动Flask服务器"""
-    print("\n🚀 启动邮件发送系统...")
-    print("=" * 50)
-    print("💕 俊俊的Markdown邮件发送系统")
-    print("🌐 服务器地址: http://127.0.0.1:5000")
-    print("📧 API文档: http://127.0.0.1:5000")
-    print("⏹️  按 Ctrl+C 停止服务器")
-    print("=" * 50)
+    logger.info("server_starting | address=http://127.0.0.1:5000")
     
     try:
-        subprocess.run([sys.executable, 'app.py'])
+        env = os.environ.copy()
+        env["APP_LOG_RESET_DONE"] = "1"
+        subprocess.run([sys.executable, 'app.py'], env=env)
     except KeyboardInterrupt:
-        print("\n👋 服务器已停止")
+        logger.info("server_stopped")
 
 def main():
     """主函数"""
-    print("💕 俊俊的Markdown邮件发送系统 - 启动检查")
-    print("=" * 60)
+    load_env()
+    configure_logging(force=True)
+    logger.info("startup_checks_begin")
     
     # 检查列表
     checks = [
@@ -155,24 +151,22 @@ def main():
     # 执行检查
     for check_name, check_func in checks:
         if not check_func():
-            print(f"\n💥 {check_name}检查失败，请修复后重试")
+            logger.error("startup_check_failed | check=%s", check_name)
             return False
     
-    print("\n✅ 所有检查通过！")
+    logger.info("startup_checks_ok")
     
     # 询问是否运行测试
-    print("\n🤔 是否运行基础测试？(推荐) [y/N]: ", end="")
     try:
-        choice = input().lower().strip()
+        choice = input("是否运行基础测试？(推荐) [y/N]: ").lower().strip()
         if choice in ['y', 'yes']:
             if not run_tests():
-                print("\n💥 测试失败，但您仍可以尝试启动服务器")
-                print("🤔 是否继续启动服务器？ [y/N]: ", end="")
-                choice = input().lower().strip()
+                logger.warning("tests_failed_continue_prompt")
+                choice = input("测试失败，是否继续启动服务器？ [y/N]: ").lower().strip()
                 if choice not in ['y', 'yes']:
                     return False
     except KeyboardInterrupt:
-        print("\n👋 用户取消")
+        logger.info("startup_cancelled")
         return False
     
     # 启动服务器
@@ -183,7 +177,7 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        print("\n👋 启动已取消")
+        logger.info("startup_cancelled")
     except Exception as e:
-        print(f"\n💥 启动过程中出现异常: {e}")
+        logger.exception("startup_exception | error=%s", e)
         sys.exit(1)

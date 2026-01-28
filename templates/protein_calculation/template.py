@@ -1,14 +1,10 @@
 """蛋白质摄入估算模板（8 模块算法 + 豆包 AI 文案生成）"""
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from dotenv import load_dotenv
-
-# 确保 .env 被加载到环境变量中（用于 ARK_API_KEY 等）
-load_dotenv()
+from src.config import get_doubao_config
 
 
 TEMPLATE_ID = "protein_calculation"
@@ -17,8 +13,8 @@ DEFAULT_SUBJECT = "「一场」SpaceOne｜你的蛋白质计划已准备好"
 # 关键计算字段，其余字段有默认值或可选
 REQUIRED_FIELDS = ["height_cm", "weight_kg", "activity_level", "goal", "kidney_status"]
 
-_ARK_MODEL = os.getenv("ARK_MODEL_ID", "ep-20251201140344-9wc9s")
-_ARK_BASE_URL = os.getenv("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
+_DOUBAO_DEFAULTS = get_doubao_config()
+_DOUBAO_BASE_URL = _DOUBAO_DEFAULTS.get("base_url") or "https://ark.cn-beijing.volces.com/api/v3"
 
 
 def _to_float(value: Any) -> Optional[float]:
@@ -233,16 +229,17 @@ def _kidney_note(mode: str) -> str:
     return "无肾脏问题"
 
 
-def _get_ark_client():
-    # 创建豆包客户端（需 ARK_API_KEY）
-    api_key = os.getenv("ARK_API_KEY")
+def _get_doubao_client():
+    # 创建豆包客户端（需 DOUBAO_API_KEY）
+    cfg = get_doubao_config()
+    api_key = cfg.get("api_key")
     if not api_key:
         return None
     try:
         from volcenginesdkarkruntime import Ark
     except Exception:
         return None
-    return Ark(base_url=_ARK_BASE_URL, api_key=api_key)
+    return Ark(base_url=cfg.get("base_url") or _DOUBAO_BASE_URL, api_key=api_key)
 
 
 def _content_to_text(content: Any) -> str:
@@ -291,11 +288,35 @@ def _normalize_markdown(md: str) -> str:
     return "\n".join(out)
 
 
-def _maybe_ai_sections(ai_payload: Dict[str, Any]) -> Dict[str, str]:
-    client = _get_ark_client()
+def _maybe_ai_sections(ai_payload: Dict[str, Any], client: Optional[Any] = None) -> Dict[str, str]:
+    client = client or _get_doubao_client()
     if not client:
-        print("[protein_calculation] AI 未启用：缺少 ARK_API_KEY 或 SDK 不可用")
-        return {}
+        raise ValueError("AI 未启用：请在 .env 中配置 DOUBAO_API_KEY，并安装 volcenginesdkarkruntime")
+    cfg = get_doubao_config()
+    model_id = cfg.get("model_id")
+    if not model_id:
+        raise ValueError("AI 未启用：请在 .env 中配置 DOUBAO_MODEL_ID")
+    response_format = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protein_report",
+            "description": "Structured output for protein report sections.",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "intro": {"type": "string"},
+                    "rationale": {"type": "string"},
+                    "food_plan": {"type": "string"},
+                    "powder": {"type": "string"},
+                    "reminders": {"type": "string"},
+                    "disclaimer": {"type": "string"},
+                    "report_md": {"type": "string"},
+                },
+                "additionalProperties": False,
+            },
+            "strict": False,
+        },
+    }
 
     # Prompt 保持原样（含示例），仅注入结构化 JSON
     prompt = f"""
@@ -530,30 +551,28 @@ def _maybe_ai_sections(ai_payload: Dict[str, Any]) -> Dict[str, str]:
 
     try:
         completion = client.chat.completions.create(
-            model=_ARK_MODEL,
+            model=model_id,
             messages=[
                 {
                     "role": "user",
                     "content": [{"type": "text", "text": prompt}],
                 }
             ],
+            response_format=response_format,
             reasoning_effort="high",
             extra_headers={"x-is-encrypted": "true"},
         )
     except Exception as exc:
-        print(f"[protein_calculation] AI 调用失败：{exc}")
-        return {}
+        raise RuntimeError(f"AI 调用失败：{exc}") from exc
 
     content = getattr(completion.choices[0].message, "content", None) if completion.choices else None
     text = _content_to_text(content)
     if not text:
-        print("[protein_calculation] AI 返回为空")
-        return {}
+        raise RuntimeError("AI 返回为空")
     try:
         data = json.loads(text)
     except Exception as exc:
-        print(f"[protein_calculation] AI 返回非 JSON：{exc}")
-        return {}
+        raise RuntimeError(f"AI 返回非 JSON：{exc}") from exc
 
     result = {}
     # 仅接受字符串字段，避免意外结构
