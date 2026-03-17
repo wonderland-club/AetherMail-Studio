@@ -47,7 +47,7 @@ def test_simple_email():
     success, message = sender._send_email(
         html_content=html_content,
         plain_text=plain_text,
-        mail_recipient="junyan101@qq.com",
+        recipient="junyan101@qq.com",
         subject="[💕爱意存档] 系统测试邮件"
     )
     

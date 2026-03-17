@@ -37,7 +37,7 @@ def get_available_templates():
         return []
 
 
-def send_email_with_template(template_id, to_email, data=None, cc=None):
+def send_email_with_template(template_id, to_email, data=None, cc=None, smtp_name=None):
     """使用统一接口发送邮件"""
     payload = {
         "template": template_id,
@@ -45,6 +45,8 @@ def send_email_with_template(template_id, to_email, data=None, cc=None):
         "cc": cc or [],
         "data": data or {},
     }
+    if smtp_name:
+        payload["smtp_name"] = smtp_name
     try:
         response = requests.post(f"{API_BASE_URL}/api/send", json=payload)
         print(f"\n发送模板 {template_id} 到 {to_email}")
@@ -76,13 +78,14 @@ def main():
     print(f"\n3. 开始发送邮件到: {recipient}")
 
     # 发送优点清单（无占位符）
-    send_email_with_template("advantages", recipient)
+    send_email_with_template("advantages", recipient, smtp_name="junyan_qq")
 
     # 发送通知模板（包含占位符）
     send_email_with_template(
         "notification",
         recipient,
-        data={"MESSAGE": "上线提醒", "CURRENT_TIME": "2024-06-01 12:00"}
+        data={"MESSAGE": "上线提醒", "CURRENT_TIME": "2024-06-01 12:00"},
+        smtp_name="junyan_qq",
     )
 
     print("\n✅ 示例演示完成！")

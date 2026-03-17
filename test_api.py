@@ -41,6 +41,7 @@ def main():
     # 发送通知模板（包含占位符数据）
     email_data = {
         "template": "notification",
+        "smtp_name": "junyan_qq",
         "to": "someone@example.com",
         "cc": [],
         "data": {"MESSAGE": "上线提醒", "CURRENT_TIME": "2024-06-01 12:00"}

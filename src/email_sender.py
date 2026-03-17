@@ -1,13 +1,15 @@
 """
 邮件发送核心功能
 """
+import mimetypes
 import smtplib
 import ssl
+from email.utils import formataddr
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Optional, List, Tuple
 import pypandoc
 try:
     from premailer import transform
@@ -15,35 +17,56 @@ try:
 except ImportError:
     PREMAILER_AVAILABLE = False
     print("⚠️ Premailer不可用，将使用基础HTML")
-import os
 
-from .config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, DEFAULT_SENDER_NAME
+from .config import get_smtp_profile
 
 class AttachmentData:
     """附件数据类"""
-    def __init__(self, filename: str, content: bytes):
+    def __init__(
+        self,
+        filename: str,
+        content: bytes,
+        content_type: Optional[str] = None,
+        content_id: Optional[str] = None,
+    ):
         self.filename = filename
         self.content = content
+        self.content_type = content_type or mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+        self.content_id = content_id
 
 class EmailSender:
     """邮件发送器"""
     
-    def __init__(self):
-        self.smtp_server = SMTP_SERVER
-        self.smtp_port = SMTP_PORT
-        self.smtp_user = SMTP_USER
-        self.smtp_password = SMTP_PASSWORD
-        self.sender_name = DEFAULT_SENDER_NAME
+    def __init__(self, smtp_name: Optional[str] = None):
+        self.profile = get_smtp_profile(smtp_name)
+        self.smtp_server = self.profile.host
+        self.smtp_port = self.profile.port
+        self.smtp_user = self.profile.user
+        self.smtp_password = self.profile.password
+        self.smtp_secure = self.profile.secure
+        self.sender_name = self.profile.sender_name
+        self.smtp_name = self.profile.smtp_name
+
+    def _connect_server(self, context: ssl.SSLContext):
+        """根据安全模式建立SMTP连接"""
+        if self.smtp_secure == 'ssl':
+            return smtplib.SMTP_SSL(self.smtp_server, self.smtp_port, context=context)
+
+        server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+        server.ehlo()
+        server.starttls(context=context)
+        server.ehlo()
+        return server
     
     def _convert_md_to_html(self, md_text: str) -> Tuple[Optional[str], Optional[str]]:
         """将Markdown转换为HTML"""
         try:
             # 使用pypandoc将MD转为HTML
             html_content = pypandoc.convert_text(
-                md_text, 
-                'html', 
+                md_text,
+                'html',
                 format='md',
-                extra_args=['--standalone']
+                extra_args=['--wrap=none']
             )
             
             # 添加邮件友好的CSS样式
@@ -124,8 +147,7 @@ class EmailSender:
             if PREMAILER_AVAILABLE:
                 try:
                     inlined_html = transform(html_with_css)
-                except Exception as premailer_error:
-                    print(f"⚠️ Premailer处理失败，使用原始HTML: {premailer_error}")
+                except Exception:
                     inlined_html = html_with_css
             else:
                 inlined_html = html_with_css
@@ -135,54 +157,79 @@ class EmailSender:
         except Exception as e:
             return None, f"Markdown转HTML失败: {str(e)}"
     
-    def _send_email(self, html_content: str, plain_text: str, mail_recipient: str,
+    def _build_message(
+        self,
+        html_content: str,
+        plain_text: str,
+        recipient: str,
+        subject: str,
+        cc_recipients: Optional[List[str]] = None,
+        attachments: Optional[List[AttachmentData]] = None,
+    ) -> Tuple[MIMEMultipart, List[str]]:
+        """构建带附件的MIME邮件"""
+        msg = MIMEMultipart('mixed')
+        msg['Subject'] = subject
+        msg['From'] = formataddr((self.sender_name, self.smtp_user)) if self.sender_name else self.smtp_user
+        msg['To'] = recipient
+
+        if cc_recipients:
+            msg['Cc'] = ', '.join(cc_recipients)
+
+        body_part = MIMEMultipart('alternative')
+        body_part.attach(MIMEText(plain_text, 'plain', 'utf-8'))
+        body_part.attach(MIMEText(html_content, 'html', 'utf-8'))
+        msg.attach(body_part)
+
+        if attachments:
+            for attachment in attachments:
+                maintype, subtype = attachment.content_type.split('/', 1)
+                part = MIMEBase(maintype, subtype)
+                part.set_payload(attachment.content)
+                encoders.encode_base64(part)
+                part.set_param('name', attachment.filename, header='Content-Type', charset='utf-8')
+                part.add_header(
+                    'Content-Disposition',
+                    'attachment',
+                    filename=('utf-8', '', attachment.filename),
+                )
+                if attachment.content_id:
+                    part['Content-ID'] = f"<{attachment.content_id}>"
+                    part['X-Attachment-Id'] = attachment.content_id
+                msg.attach(part)
+
+        recipients = [recipient]
+        if cc_recipients:
+            recipients.extend(cc_recipients)
+
+        return msg, recipients
+
+    def _send_email(self, html_content: str, plain_text: str, recipient: str,
                    subject: str, cc_recipients: Optional[List[str]] = None,
                    attachments: Optional[List[AttachmentData]] = None) -> Tuple[bool, str]:
         """发送邮件"""
         try:
             # 创建SSL上下文
             context = ssl.create_default_context()
-            
+
             # 连接到SMTP服务器
-            server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port, context=context)
+            server = self._connect_server(context)
             server.login(self.smtp_user, self.smtp_password)
-            
-            # 创建邮件
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = subject
-            msg['From'] = self.smtp_user
-            msg['To'] = mail_recipient
-            
-            if cc_recipients:
-                msg['Cc'] = ', '.join(cc_recipients)
-            
-            # 添加邮件内容（纯文本 + HTML）
-            msg.attach(MIMEText(plain_text, 'plain', 'utf-8'))
-            msg.attach(MIMEText(html_content, 'html', 'utf-8'))
-            
-            # 添加附件
-            if attachments:
-                for attachment in attachments:
-                    part = MIMEBase('application', 'octet-stream')
-                    part.set_payload(attachment.content)
-                    encoders.encode_base64(part)
-                    part.add_header(
-                        'Content-Disposition',
-                        f'attachment; filename= {attachment.filename}'
-                    )
-                    msg.attach(part)
-            
-            # 准备收件人列表
-            recipients = [mail_recipient]
-            if cc_recipients:
-                recipients.extend(cc_recipients)
-            
+
+            msg, recipients = self._build_message(
+                html_content=html_content,
+                plain_text=plain_text,
+                recipient=recipient,
+                subject=subject,
+                cc_recipients=cc_recipients,
+                attachments=attachments,
+            )
+
             # 发送邮件
             server.sendmail(self.smtp_user, recipients, msg.as_string())
             server.quit()
-            
-            return True, "邮件发送成功"
-            
+
+            return True, f"邮件发送成功 (SMTP: {self.smtp_name})"
+
         except smtplib.SMTPAuthenticationError as e:
             return False, f"SMTP认证失败，请检查邮箱和授权码: {str(e)}"
         except smtplib.SMTPConnectError as e:
@@ -206,7 +253,7 @@ class EmailSender:
         success, message = self._send_email(
             html_content=html_content,
             plain_text=md_content,  # 原始MD作为纯文本版本
-            mail_recipient=recipient,
+            recipient=recipient,
             subject=subject,
             cc_recipients=cc_recipients,
             attachments=attachments

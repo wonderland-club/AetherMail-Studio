@@ -2,7 +2,7 @@
 模板注册表 - 扫描 templates/<id>/template.py 并加载定义
 """
 import importlib.util
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -12,24 +12,48 @@ class TemplateLoadError(Exception):
 
 
 @dataclass
+class TemplateAttachment:
+    """模板附件定义"""
+
+    slot: str
+    path: Path
+
+
+@dataclass
 class TemplateDefinition:
     template_id: str
     base_path: Path
     default_subject: str
     required_fields: List[str]
     render_callable: Callable[[Dict[str, Any], Any], str]
-    get_subject_callable: Optional[Callable[[Dict[str, Any]], str]] = None
     description: str = ""
+    attachment_slots: List[str] = field(default_factory=list)
 
     def render(self, data: Dict[str, Any], renderer) -> str:
         return self.render_callable(data, renderer)
 
-    def subject_for(self, data: Dict[str, Any]) -> str:
-        if callable(self.get_subject_callable):
-            subject = self.get_subject_callable(data)
-            if subject:
-                return subject
-        return self.default_subject
+    def attachments_for(self) -> List[TemplateAttachment]:
+        """按模板约定加载附件槽位中的真实文件"""
+        attachments_root = self.base_path / 'attachments'
+        if not attachments_root.exists() or not self.attachment_slots:
+            return []
+
+        attachment_paths: List[TemplateAttachment] = []
+        for slot in self.attachment_slots:
+            slot_dir = attachments_root / slot
+            if not slot_dir.exists():
+                continue
+
+            candidates = [
+                path for path in sorted(slot_dir.iterdir())
+                if path.is_file() and not path.name.startswith('.') and path.name != 'README.md'
+            ]
+            if len(candidates) > 1:
+                raise ValueError(f"附件槽位 {slot} 中只能放 1 个文件，当前有 {len(candidates)} 个")
+            if candidates:
+                attachment_paths.append(TemplateAttachment(slot=slot, path=candidates[0]))
+
+        return attachment_paths
 
 
 class TemplateRegistry:
@@ -60,11 +84,17 @@ class TemplateRegistry:
         if not callable(render_callable):
             raise TemplateLoadError(f"模板 {template_dir.name} 缺少可调用的 render(data, renderer)")
 
-        template_id = getattr(module, 'TEMPLATE_ID', template_dir.name)
-        default_subject = getattr(module, 'DEFAULT_SUBJECT', f"来自邮件系统的{template_id}")
+        template_id = getattr(module, 'TEMPLATE_ID', None)
+        if not isinstance(template_id, str) or not template_id.strip():
+            raise TemplateLoadError(f"模板 {template_dir.name} 必须显式提供非空字符串 TEMPLATE_ID")
+
+        default_subject = getattr(module, 'DEFAULT_SUBJECT', None)
+        if not isinstance(default_subject, str) or not default_subject.strip():
+            raise TemplateLoadError(f"模板 {template_dir.name} 必须显式提供非空字符串 DEFAULT_SUBJECT")
+
         required_fields = getattr(module, 'REQUIRED_FIELDS', []) or []
-        get_subject_callable = getattr(module, 'get_subject', None)
         description = getattr(module, 'DESCRIPTION', '') or ''
+        attachment_slots = getattr(module, 'ATTACHMENT_SLOTS', []) or []
 
         return TemplateDefinition(
             template_id=template_id,
@@ -72,8 +102,8 @@ class TemplateRegistry:
             default_subject=default_subject,
             required_fields=list(required_fields),
             render_callable=render_callable,
-            get_subject_callable=get_subject_callable,
             description=description,
+            attachment_slots=list(attachment_slots),
         )
 
     def reload(self) -> None:
@@ -102,6 +132,7 @@ class TemplateRegistry:
                 'description': definition.description,
                 'default_subject': definition.default_subject,
                 'required_fields': definition.required_fields,
+                'attachment_slots': definition.attachment_slots,
             }
             for definition in self.templates.values()
         ]

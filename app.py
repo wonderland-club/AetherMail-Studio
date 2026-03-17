@@ -10,7 +10,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.core.template_registry import TemplateRegistry
 from src.core.renderer import Renderer
-from src.email_sender import EmailSender
+from src.config import get_smtp_profiles_public
+from src.email_sender import AttachmentData, EmailSender
 from src.utils.email_validator import validate_email
 
 app = Flask(__name__)
@@ -18,7 +19,6 @@ app = Flask(__name__)
 # 初始化核心组件
 renderer = Renderer()
 template_registry = TemplateRegistry()
-email_sender = EmailSender()
 
 
 def error_response(message: str, status: int = 400, **extra):
@@ -38,6 +38,7 @@ def home():
             "GET /": "显示此帮助信息",
             "GET /health": "健康检查",
             "GET /templates": "获取可用模板列表",
+            "GET /smtp-configs": "获取可用SMTP主体列表",
             "POST /api/send": "发送邮件（统一请求字段）"
         },
         "request_schema": {
@@ -45,10 +46,11 @@ def home():
             "to": "收件人邮箱 (字符串)",
             "cc": "可选，抄送列表 (数组)",
             "data": "可选，模板渲染数据对象",
-            "attachments": "预留，可选"
+            "smtp_name": "可选，发件SMTP主体标识；省略时使用默认主体"
         },
         "example": {
             "template": "notification",
+            "smtp_name": "junyan_qq",
             "to": "user@example.com",
             "cc": ["cc@example.com"],
             "data": {"MESSAGE": "上线提醒", "CURRENT_TIME": "2024-06-01"}
@@ -72,6 +74,17 @@ def get_templates():
     })
 
 
+@app.route('/smtp-configs', methods=['GET'])
+def get_smtp_configs():
+    """获取全部SMTP主体（密码默认脱敏）"""
+    smtp_configs = get_smtp_profiles_public()
+    return jsonify({
+        "success": True,
+        "smtp_configs": smtp_configs,
+        "count": len(smtp_configs)
+    })
+
+
 @app.route('/api/send', methods=['POST'])
 def send_email():
     """发送邮件：模板ID + 请求体数据"""
@@ -83,6 +96,7 @@ def send_email():
     recipient_email = data.get('to')
     cc_recipients = data.get('cc', []) or []
     template_data = data.get('data') or {}
+    smtp_name = data.get('smtp_name')
     errors = {}
     if not template_id:
         errors['template'] = "缺少必需字段 template"
@@ -101,6 +115,8 @@ def send_email():
 
     if not isinstance(template_data, dict):
         errors['data'] = "data 必须是对象"
+    if smtp_name is not None and not isinstance(smtp_name, str):
+        errors['smtp_name'] = "smtp_name 必须是字符串"
 
     if errors:
         return error_response("请求验证失败", 400, details=errors)
@@ -126,9 +142,18 @@ def send_email():
             missing_fields=missing_fields
         )
 
+    enriched_template_data = dict(template_data)
+
+    try:
+        attachment_specs = template_def.attachments_for()
+    except ValueError as exc:
+        return error_response(f"模板附件配置错误: {exc}", 400, template=template_id)
+    except OSError as exc:
+        return error_response(f"读取模板附件失败: {exc}", 500, template=template_id)
+
     # 渲染 Markdown 内容
     try:
-        md_content = template_def.render(template_data, renderer)
+        md_content = template_def.render(enriched_template_data, renderer)
     except ValueError as exc:
         return error_response(str(exc), 400)
     except FileNotFoundError as exc:
@@ -137,9 +162,29 @@ def send_email():
         return error_response(f"渲染模板失败: {exc}", 500)
 
     # 处理主题
-    email_subject = template_def.subject_for(template_data)
-    if not email_subject:
-        email_subject = f"来自邮件系统的{template_id}"
+    email_subject = template_def.default_subject
+
+    try:
+        attachments = [
+            AttachmentData(
+                filename=spec.path.name,
+                content=spec.path.read_bytes(),
+                content_id=f"{template_id}-{spec.slot}",
+            )
+            for spec in attachment_specs
+        ]
+    except OSError as exc:
+        return error_response(f"读取模板附件失败: {exc}", 500, template=template_id)
+
+    try:
+        email_sender = EmailSender(smtp_name=smtp_name)
+    except (KeyError, ValueError) as exc:
+        error_message = exc.args[0] if exc.args else str(exc)
+        return error_response(
+            error_message,
+            400,
+            available_smtp_configs=get_smtp_profiles_public()
+        )
 
     # 发送邮件
     success, message = email_sender.send_markdown_email(
@@ -147,6 +192,7 @@ def send_email():
         recipient=recipient_email,
         subject=email_subject,
         cc_recipients=cc_recipients,
+        attachments=attachments,
     )
 
     if success:
@@ -157,6 +203,10 @@ def send_email():
             "subject": email_subject,
             "recipient": recipient_email,
             "cc": cc_recipients,
+            "smtp_name": email_sender.smtp_name,
+            "smtp_user": email_sender.smtp_user,
+            "attachment_count": len(attachments),
+            "attachment_names": [attachment.filename for attachment in attachments],
         })
 
     return error_response(message, 400, template=template_id)
@@ -168,7 +218,7 @@ def not_found(error):
     return jsonify({
         "success": False,
         "error": "API端点不存在",
-        "available_endpoints": ["GET /", "GET /health", "GET /templates", "POST /api/send"]
+        "available_endpoints": ["GET /", "GET /health", "GET /templates", "GET /smtp-configs", "POST /api/send"]
     }), 404
 
 

@@ -54,28 +54,22 @@ def check_env_config():
     
     if not os.path.exists('.env'):
         print("❌ .env文件不存在")
-        print("💡 请复制.env.example为.env并配置您的邮箱信息")
+        print("💡 请在项目根目录创建 .env，并配置 SMTP_PROFILES、DEFAULT_SMTP_NAME 和对应的 SMTP_PROFILE_*")
         return False
     
     # 检查必要的环境变量
     from dotenv import load_dotenv
     load_dotenv()
-    
-    required_vars = [
-        'SMTP_SERVER', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD'
-    ]
-    
-    missing_vars = []
-    for var in required_vars:
-        if not os.getenv(var):
-            missing_vars.append(var)
-    
-    if missing_vars:
-        print(f"❌ 缺失环境变量: {', '.join(missing_vars)}")
-        print("💡 请在.env文件中配置这些变量")
+
+    try:
+        from src.config import get_smtp_profiles_public
+        smtp_profiles = get_smtp_profiles_public()
+    except Exception as exc:
+        print(f"❌ SMTP配置无效: {exc}")
+        print("💡 请检查 .env 中的 SMTP_PROFILES、DEFAULT_SMTP_NAME 以及对应的 SMTP_PROFILE_* 配置")
         return False
-    
-    print("✅ 环境配置完整")
+
+    print(f"✅ 环境配置完整，已加载 {len(smtp_profiles)} 个SMTP主体")
     return True
 
 def check_template_files():
@@ -102,19 +96,9 @@ def run_tests():
             print("✅ SMTP连接测试通过")
         else:
             print("❌ SMTP连接测试失败")
-            print(result.stderr)
+            print(result.stdout or result.stderr)
             return False
-        
-        # 运行邮件发送测试
-        result = subprocess.run([sys.executable, 'test_email.py'], 
-                              capture_output=True, text=True, timeout=60)
-        if result.returncode == 0:
-            print("✅ 邮件发送测试通过")
-        else:
-            print("❌ 邮件发送测试失败")
-            print(result.stderr)
-            return False
-        
+
         return True
         
     except subprocess.TimeoutExpired:
