@@ -151,10 +151,11 @@ class EmailSender:
                     inlined_html = html_with_css
             else:
                 inlined_html = html_with_css
-            
+            logger.info("[email_sender] markdown_to_html_success")
             return inlined_html, None
             
         except Exception as e:
+            logger.exception("[email_sender] markdown_to_html_failed")
             return None, f"Markdown转HTML失败: {str(e)}"
     
     def _build_message(
@@ -231,12 +232,16 @@ class EmailSender:
             return True, f"邮件发送成功 (SMTP: {self.smtp_name})"
 
         except smtplib.SMTPAuthenticationError as e:
+            logger.warning("[email_sender] smtp_auth_failed | %s", e)
             return False, f"SMTP认证失败，请检查邮箱和授权码: {str(e)}"
         except smtplib.SMTPConnectError as e:
+            logger.warning("[email_sender] smtp_connect_failed | %s", e)
             return False, f"SMTP连接失败，请检查网络连接: {str(e)}"
         except smtplib.SMTPException as e:
+            logger.warning("[email_sender] smtp_exception | %s", e)
             return False, f"SMTP错误: {str(e)}"
         except Exception as e:
+            logger.exception("[email_sender] send_exception")
             return False, f"邮件发送失败: {str(e)}"
     
     def send_markdown_email(self, md_content: str, recipient: str, subject: str,
@@ -247,6 +252,7 @@ class EmailSender:
         # 转换Markdown为HTML
         html_content, error = self._convert_md_to_html(md_content)
         if error:
+            logger.warning("[email_sender] convert_failed | %s", error)
             return False, error
         
         # 发送邮件
