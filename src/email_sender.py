@@ -1,6 +1,7 @@
 """
 邮件发送核心功能
 """
+import logging
 import mimetypes
 import smtplib
 import ssl
@@ -19,6 +20,8 @@ except ImportError:
     print("⚠️ Premailer不可用，将使用基础HTML")
 
 from .config import get_smtp_profile
+
+logger = logging.getLogger("email_sender")
 
 class AttachmentData:
     """附件数据类"""

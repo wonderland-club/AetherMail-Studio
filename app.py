@@ -6,16 +6,18 @@ import os
 import sys
 import time
 import uuid
-from flask import Flask, request, jsonify, g
+from flask import Flask, request, jsonify, g, has_request_context
 
 # 添加src目录到Python路径
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.config import load_env
+from src.ai import AIConfigurationError, AIProviderError, AIResponseError
 from src.core.template_registry import TemplateRegistry
 from src.core.renderer import Renderer
 from src.config import get_smtp_profiles_public
 from src.email_sender import AttachmentData, EmailSender
+from src.logging_setup import configure_logging, request_id_var
 from src.utils.email_validator import validate_email
 
 load_env()
@@ -34,6 +36,13 @@ def error_response(message: str, status: int = 400, **extra):
     if extra:
         payload.update(extra)
     return jsonify(payload), status
+
+
+def log_request_step(stage: str, **details):
+    payload = dict(details)
+    if has_request_context():
+        payload.setdefault("endpoint", request.path)
+    logger.info("stage=%s | %s", stage, payload)
 
 
 @app.before_request
@@ -201,6 +210,12 @@ def send_email():
     except ValueError as exc:
         log_request_step("render_failed_value_error", template=template_id, error=str(exc))
         return error_response(str(exc), 400)
+    except AIConfigurationError as exc:
+        log_request_step("render_failed_ai_config", template=template_id, error=str(exc))
+        return error_response(str(exc), 500, template=template_id)
+    except (AIProviderError, AIResponseError) as exc:
+        log_request_step("render_failed_ai_provider", template=template_id, error=str(exc))
+        return error_response(str(exc), 502, template=template_id)
     except FileNotFoundError as exc:
         log_request_step("render_failed_missing_file", template=template_id, error=str(exc))
         return error_response(f"模板文件缺失: {exc}", 500)

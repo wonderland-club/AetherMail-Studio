@@ -58,7 +58,7 @@ def check_env_config():
     
     if not os.path.exists('.env'):
         print("❌ .env文件不存在")
-        print("💡 请在项目根目录创建 .env，并配置 SMTP_PROFILES、DEFAULT_SMTP_NAME 和对应的 SMTP_PROFILE_*")
+        print("💡 请复制 .env.example 为 .env，并配置 SMTP_PROFILES、DEFAULT_SMTP_NAME 和对应的 SMTP_PROFILE_*")
         return False
     
     # 检查必要的环境变量

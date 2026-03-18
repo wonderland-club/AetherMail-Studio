@@ -1,10 +1,9 @@
 """蛋白质摄入估算模板（8 模块算法 + 豆包 AI 文案生成）"""
 import json
-import re
+import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
-
-from src.config import get_doubao_config
+from src.ai import DoubaoService, normalize_markdown
 
 
 TEMPLATE_ID = "protein_calculation"
@@ -12,9 +11,7 @@ DESCRIPTION = "蛋白质摄入估算与建议（基于身高、体重、活动�
 DEFAULT_SUBJECT = "「一场」SpaceOne｜你的蛋白质计划已准备好"
 # 关键计算字段，其余字段有默认值或可选
 REQUIRED_FIELDS = ["height_cm", "weight_kg", "activity_level", "goal", "kidney_status"]
-
-_DOUBAO_DEFAULTS = get_doubao_config()
-_DOUBAO_BASE_URL = _DOUBAO_DEFAULTS.get("base_url") or "https://ark.cn-beijing.volces.com/api/v3"
+logger = logging.getLogger("templates.protein_calculation")
 
 
 def _to_float(value: Any) -> Optional[float]:
@@ -229,95 +226,8 @@ def _kidney_note(mode: str) -> str:
     return "无肾脏问题"
 
 
-def _get_doubao_client():
-    # 创建豆包客户端（需 DOUBAO_API_KEY）
-    cfg = get_doubao_config()
-    api_key = cfg.get("api_key")
-    if not api_key:
-        return None
-    try:
-        from volcenginesdkarkruntime import Ark
-    except Exception:
-        return None
-    return Ark(base_url=cfg.get("base_url") or _DOUBAO_BASE_URL, api_key=api_key)
-
-
-def _content_to_text(content: Any) -> str:
-    if content is None:
-        return ""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        texts = []
-        for item in content:
-            if isinstance(item, dict) and item.get("type") == "text":
-                texts.append(item.get("text") or "")
-        return "\n".join(texts)
-    return str(content)
-
-
-def _normalize_markdown(md: str) -> str:
-    """给 AI 文案补齐基础的换行与列表空行"""
-    if not md:
-        return ""
-    lines = [line.rstrip() for line in md.splitlines()]
-    out = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped == "":
-            if out and out[-1] == "":
-                continue
-            out.append("")
-            continue
-
-        is_heading = stripped.startswith("#")
-        is_unordered = stripped.startswith(("- ", "* ", "+ "))
-        # 有序列表匹配：数字. 空格
-        is_ordered = bool(re.match(r"^\d+\.\s", stripped))
-
-        if out and out[-1] != "" and (is_heading or is_unordered or is_ordered):
-            out.append("")
-
-        out.append(stripped)
-
-    while out and out[0] == "":
-        out.pop(0)
-    while out and out[-1] == "":
-        out.pop()
-
-    return "\n".join(out)
-
-
-def _maybe_ai_sections(ai_payload: Dict[str, Any], client: Optional[Any] = None) -> Dict[str, str]:
-    client = client or _get_doubao_client()
-    if not client:
-        raise ValueError("AI 未启用：请在 .env 中配置 DOUBAO_API_KEY，并安装 volcenginesdkarkruntime")
-    cfg = get_doubao_config()
-    model_id = cfg.get("model_id")
-    if not model_id:
-        raise ValueError("AI 未启用：请在 .env 中配置 DOUBAO_MODEL_ID")
-    response_format = {
-        "type": "json_schema",
-        "json_schema": {
-            "name": "protein_report",
-            "description": "Structured output for protein report sections.",
-            "schema": {
-                "type": "object",
-                "properties": {
-                    "intro": {"type": "string"},
-                    "rationale": {"type": "string"},
-                    "food_plan": {"type": "string"},
-                    "powder": {"type": "string"},
-                    "reminders": {"type": "string"},
-                    "disclaimer": {"type": "string"},
-                    "report_md": {"type": "string"},
-                },
-                "additionalProperties": False,
-            },
-            "strict": False,
-        },
-    }
-
+def _maybe_ai_sections(ai_payload: Dict[str, Any], service: Optional[DoubaoService] = None) -> Dict[str, str]:
+    service = service or DoubaoService()
     # Prompt 保持原样（含示例），仅注入结构化 JSON
     prompt = f"""
 
@@ -548,31 +458,25 @@ def _maybe_ai_sections(ai_payload: Dict[str, Any], client: Optional[Any] = None)
 
 请直接返回 JSON 字符串，不要添加代码块标记。
 """
-
-    try:
-        completion = client.chat.completions.create(
-            model=model_id,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "text": prompt}],
-                }
-            ],
-            response_format=response_format,
-            reasoning_effort="high",
-            extra_headers={"x-is-encrypted": "true"},
-        )
-    except Exception as exc:
-        raise RuntimeError(f"AI 调用失败：{exc}") from exc
-
-    content = getattr(completion.choices[0].message, "content", None) if completion.choices else None
-    text = _content_to_text(content)
-    if not text:
-        raise RuntimeError("AI 返回为空")
-    try:
-        data = json.loads(text)
-    except Exception as exc:
-        raise RuntimeError(f"AI 返回非 JSON：{exc}") from exc
+    data = service.generate_structured_json(
+        prompt=prompt,
+        schema_name="protein_report",
+        schema_description="Structured output for protein report sections.",
+        schema={
+            "type": "object",
+            "properties": {
+                "intro": {"type": "string"},
+                "rationale": {"type": "string"},
+                "food_plan": {"type": "string"},
+                "powder": {"type": "string"},
+                "reminders": {"type": "string"},
+                "disclaimer": {"type": "string"},
+                "report_md": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+        strict=False,
+    )
 
     result = {}
     # 仅接受字符串字段，避免意外结构
@@ -580,14 +484,14 @@ def _maybe_ai_sections(ai_payload: Dict[str, Any], client: Optional[Any] = None)
         if key in data and isinstance(data[key], str):
             result[key] = data[key].strip()
     if result:
-        print("[protein_calculation] 已使用 AI 生成的文案片段/Markdown")
+        logger.info("protein_ai_sections_ready | keys=%s", ",".join(sorted(result.keys())))
     return result
 
 
 def _build_report(ai_ctx: Dict[str, Any], ai_sections: Dict[str, str]) -> str:
     """将 AI 生成的片段或完整 Markdown 组装为最终报告"""
     if ai_sections.get("report_md"):
-        return _normalize_markdown(ai_sections["report_md"])
+        return normalize_markdown(ai_sections["report_md"])
 
     # 未提供完整 report_md 时，按分段字段拼装
     intro = ai_sections.get("intro", "").strip()
@@ -612,7 +516,7 @@ def _build_report(ai_ctx: Dict[str, Any], ai_sections: Dict[str, str]) -> str:
     if disclaimer:
         parts.append("## 收尾 & 免责声明\n" + disclaimer)
 
-    return _normalize_markdown("\n\n".join([p for p in parts if p]).strip())
+    return normalize_markdown("\n\n".join([p for p in parts if p]).strip())
 
 
 def render(data: Dict[str, Any], renderer):

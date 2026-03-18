@@ -12,7 +12,7 @@ conda env update -f environment.yml --prune
 ```
 
 2) 配置邮箱（`.env`）  
-在项目根目录新建 `.env`，仅使用多 SMTP 主体配置：
+复制 `.env.example` 为 `.env`，并按需替换示例值。配置采用多 SMTP 主体格式：
 ```env
 DEFAULT_SMTP_NAME=junyan_qq
 SMTP_PROFILES=junyan_qq,huaqing_exmail
@@ -59,7 +59,8 @@ python create_template.py --template-id demo_notice --subject "测试主题"
 ```bash
 python create_template.py --template-id demo_notice --subject "测试主题" --description "测试通知模板"
 ```
-命令会默认创建 `template.py`、`template.md` 以及 `attachments/slot1~3/`。
+命令会默认创建 `template.py`、`template.md` 以及 `attachments/slot1~3/`。  
+完整模板规范、可选 AI hook 写法和维护矩阵见 [templates/新增模板说明.md](/Users/schen/Documents/MyProjects/AetherMail-Studio/templates/%E6%96%B0%E5%A2%9E%E6%A8%A1%E6%9D%BF%E8%AF%B4%E6%98%8E.md)。
 
 6) 试发一封（示例模板 `notification`）  
 ```bash
@@ -71,6 +72,23 @@ curl -X POST http://127.0.0.1:5000/api/send \
     "to": "user@example.com",
     "cc": [],
     "data": {"MESSAGE": "上线提醒", "CURRENT_TIME": "2024-06-01 12:00"}
+  }'
+```
+
+7) 验证真实豆包链路（推荐先发给当前 SMTP 主体自己的邮箱）  
+以 `junyan_qq` 为例，`to` 直接填该主体自己的邮箱：
+```bash
+curl -X POST http://127.0.0.1:5000/api/send \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template": "doubao_smoke_test",
+    "smtp_name": "junyan_qq",
+    "to": "junyan101@qq.com",
+    "cc": [],
+    "data": {
+      "NAME": "俊彦",
+      "TOPIC": "验证豆包调用、Markdown 渲染与 SMTP 发送链路"
+    }
   }'
 ```
 
@@ -125,8 +143,10 @@ markdowm_tomail_server/
 │   ├── notification/
 │   │   ├── template.md
 │   │   └── template.py
+│   ├── doubao_smoke_test/   # 最小 AI 验证模板
 │   └── protein_calculation/…
 ├── src/
+│   ├── ai/                  # 豆包服务层、AI异常、Markdown标准化
 │   ├── core/
 │   │   ├── renderer.py      # 处理 {{&VAR}} 占位符
 │   │   └── template_registry.py
@@ -134,16 +154,20 @@ markdowm_tomail_server/
 │   ├── email_sender.py      # Markdown → HTML → 邮件发送
 │   └── utils/
 │       └── email_validator.py
-├── test_api.py              # API 示例测试
-└── test_smtp.py             # SMTP 连通性测试
+├── tests/
+│   ├── test_ai_service.py   # AI 服务层单测
+│   └── test_ai_api.py       # AI 模板接口与错误映射单测
+├── test_smtp.py             # SMTP 连通性测试
+└── examples/send_email.py   # API 调用示例
 ```
 
 ## 🧩 模板开发约定
-- 每个模板目录包含：`template.md`（正文）、`template.py`（定义 ID/默认主题/必需字段/render 函数）。  
-- 占位符格式 `{{&VAR}}`，变量名需与请求体 `data` 中的键一致，缺失会返回 400。  
-- 主题统一由模板的 `DEFAULT_SUBJECT` 提供。
+- 模板开发规范已收敛到 [templates/新增模板说明.md](/Users/schen/Documents/MyProjects/AetherMail-Studio/templates/%E6%96%B0%E5%A2%9E%E6%A8%A1%E6%9D%BF%E8%AF%B4%E6%98%8E.md)。
+- 当前只有一种模板脚手架，AI 能力是模板内部的可选扩展点，不区分 `basic/ai` 两套生成模式。
 
 ## 🧪 测试
 - `python test_smtp.py --list`：查看当前 SMTP 主体。  
 - `python test_smtp.py --smtp-name huaqing_exmail`：验证指定 SMTP 主体连通性。  
-- `python test_api.py`：基于示例数据的 API 请求测试。
+- `python examples/send_email.py`：按示例模板调用 API。
+- `python -m unittest tests.test_create_template`：验证统一脚手架生成结果和可选 AI hook 升级路径。
+- `python -m unittest tests.test_ai_service tests.test_ai_api`：验证 AI 服务层、AI 模板错误映射和蛋白模板的 stub 渲染链路。

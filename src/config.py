@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from dotenv import load_dotenv
@@ -67,17 +68,6 @@ def get_doubao_config() -> Dict[str, Optional[str]]:
         if not config.get(key) and value:
             config[key] = value
     return config
-
-
-def validate_smtp_config() -> None:
-    missing = []
-    if not SMTP_USER:
-        missing.append("SMTP_USER")
-    if not SMTP_PASSWORD:
-        missing.append("SMTP_PASSWORD")
-    if missing:
-        raise ValueError(f"请在.env文件中配置: {', '.join(missing)}")
-
 
 load_env()
 

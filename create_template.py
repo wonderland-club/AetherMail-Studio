@@ -32,15 +32,38 @@ REQUIRED_FIELDS = []
 ATTACHMENT_SLOTS = ["slot1", "slot2", "slot3"]
 
 
+def _maybe_generate_ai_report(payload):
+    \"\"\"Optional AI hook.
+
+    默认不调用 AI，直接返回空字符串。
+    如需启用，可在这里按需接入 src.ai 中的 DoubaoService / normalize_markdown，
+    并返回要注入到 {{&AI_REPORT}} 的 Markdown 文本。
+    \"\"\"
+    return ""
+
+
 def render(data, renderer):
     md_path = Path(__file__).with_name("template.md")
     md_text = md_path.read_text(encoding="utf-8")
-    return renderer.render(md_text, data or {{}})
+    payload = dict(data or {{}})
+
+    ai_report = _maybe_generate_ai_report(payload)
+    if ai_report:
+        payload["AI_REPORT"] = ai_report
+    else:
+        payload.setdefault("AI_REPORT", "")
+
+    return renderer.render(md_text, payload)
 """
 
 
 def build_template_md() -> str:
-    return "<!-- 在此填写邮件正文，变量格式：&#123;&#123;&VAR&#125;&#125; -->\n"
+    return (
+        "<!-- 在此填写邮件正文，变量格式：&#123;&#123;&VAR&#125;&#125; -->\n\n"
+        "您好，\n\n"
+        "请在此填写邮件正文。\n\n"
+        "{{&AI_REPORT}}\n"
+    )
 
 
 def build_attachments_readme(description: str) -> str:
@@ -122,6 +145,7 @@ def main() -> int:
     print(f"📁 目录: {target_dir}")
     print(f"✉️  主题: {args.subject}")
     print("📎 附件槽位: slot1, slot2, slot3")
+    print("📘 模板规范: templates/新增模板说明.md")
     print("🔄 如服务正在运行，请重启后再使用新模板")
     return 0
 
