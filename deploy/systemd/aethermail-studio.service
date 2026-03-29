@@ -1,0 +1,33 @@
+[Unit]
+Description=AetherMail Studio Gunicorn service
+After=network.target
+
+[Service]
+Type=simple
+User=aethermail
+Group=aethermail
+WorkingDirectory=/srv/aethermail-studio
+EnvironmentFile=/srv/aethermail-studio/.env
+Environment=PATH=/srv/aethermail-studio/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PYTHONUNBUFFERED=1
+
+# If you deploy with Conda instead of .venv, replace PATH and ExecStart
+# with the bin directory of your Conda environment.
+ExecStart=/srv/aethermail-studio/.venv/bin/gunicorn -c /srv/aethermail-studio/gunicorn.conf.py wsgi:app
+ExecReload=/bin/kill -s HUP $MAINPID
+
+Restart=always
+RestartSec=5
+TimeoutStartSec=30
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0027
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

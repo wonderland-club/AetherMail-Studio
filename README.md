@@ -45,10 +45,15 @@ PY
 ```
 
 4) 启动  
+开发环境：
 ```bash
 python start.py      # 推荐：带检查提示
 # 或
 python app.py        # 直接启动 Flask
+```
+生产环境（Gunicorn）：
+```bash
+python -m gunicorn -c gunicorn.conf.py wsgi:app
 ```
 
 5) 创建一个空白模板  
@@ -93,9 +98,91 @@ curl -X POST http://127.0.0.1:5000/api/send \
 ```
 
 ## 📦 Conda 环境
-- `environment.yml` 固定 Python 3.10，并预装 `flask`、`pypandoc`、`pandoc`、`python-dotenv`、`email-validator`，其余（如 `premailer`、`volcengine-python-sdk[ark]`）通过 pip 安装。  
+- `environment.yml` 固定 Python 3.10，并预装 `flask`、`pypandoc`、`pandoc`、`python-dotenv`、`email-validator`，其余（如 `gunicorn`、`premailer`、`volcengine-python-sdk[ark]`）通过 pip 安装。  
 - 清理环境：`conda env remove -n aethermail`。  
 - 如需自定义环境名，修改 `environment.yml` 的 `name` 后重新创建。
+
+## 🚀 生产部署（Gunicorn）
+- WSGI 入口为 `wsgi:app`，Gunicorn 配置文件为 `gunicorn.conf.py`。
+- 默认监听 `127.0.0.1:5000`，适合放在 `nginx` 反向代理后面。
+- 默认使用 `gthread` worker，适合当前这种会等待 SMTP、AI 接口和 Markdown 转换的 I/O 阻塞型请求。
+- 默认超时为 180 秒；如果某些模板会调用外部 AI，建议不要把超时设得太低。
+- 仓库附带了可直接改的样板文件：
+  - `deploy/systemd/aethermail-studio.service`
+  - `deploy/nginx/aethermail-studio.conf`
+
+启动命令：
+```bash
+python -m gunicorn -c gunicorn.conf.py wsgi:app
+```
+
+常用环境变量（可写进 `.env` 或 systemd `Environment=`）：
+```env
+GUNICORN_BIND=127.0.0.1:5000
+GUNICORN_WORKERS=2
+GUNICORN_THREADS=4
+GUNICORN_TIMEOUT=180
+GUNICORN_GRACEFUL_TIMEOUT=30
+GUNICORN_KEEPALIVE=5
+GUNICORN_LOG_LEVEL=info
+GUNICORN_FORWARDED_ALLOW_IPS=127.0.0.1
+```
+
+如果部署在 `nginx` 后面，应用默认启用了 `ProxyFix`，会信任 1 层代理转发头；对应变量如下：
+```env
+ENABLE_PROXY_FIX=true
+PROXY_FIX_X_FOR=1
+PROXY_FIX_X_PROTO=1
+PROXY_FIX_X_HOST=1
+PROXY_FIX_X_PORT=1
+PROXY_FIX_X_PREFIX=0
+```
+
+最小 `nginx` 反代示例：
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:5000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 180s;
+}
+```
+
+推荐的服务器目录约定：
+```text
+/srv/aethermail-studio
+├── .env
+├── .venv/
+├── gunicorn.conf.py
+└── ...
+```
+
+一套最小上线步骤：
+1. 安装系统依赖：`python3.10+`、`python3-venv`、`pandoc`、`nginx`。
+2. 将项目放到 `/srv/aethermail-studio`，并创建专用用户 `aethermail`。
+3. 在项目目录创建虚拟环境并安装依赖：
+```bash
+cd /srv/aethermail-studio
+python3 -m venv .venv
+. .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+4. 配置 `.env`，确认 SMTP 和豆包相关变量可用。
+5. 复制 `deploy/systemd/aethermail-studio.service` 到 `/etc/systemd/system/`，按实际路径调整。
+6. 复制 `deploy/nginx/aethermail-studio.conf` 到 `/etc/nginx/sites-available/`，修改 `server_name`。
+7. 启用并启动服务：
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now aethermail-studio
+sudo ln -sf /etc/nginx/sites-available/aethermail-studio.conf /etc/nginx/sites-enabled/aethermail-studio.conf
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+如果你坚持用 Conda 而不是 `.venv`，只需要把 systemd 里的 `PATH` 和 `ExecStart` 改成 Conda 环境对应的 `bin` 路径。
 
 ## 🧠 运行逻辑（请求如何走）
 - 应用入口 `app.py`：初始化 `Renderer`（占位符渲染）、`TemplateRegistry`（扫描 `templates/*/template.py`）、`EmailSender`（Markdown→HTML→SMTP），并注册 Flask 路由。  
@@ -132,6 +219,7 @@ curl -X POST http://127.0.0.1:5000/api/send \
 ```
 markdowm_tomail_server/
 ├── create_template.py       # 新建空白模板脚手架
+├── deploy/                  # systemd / nginx 部署样板
 ├── app.py                   # Flask API，统一 /api/send
 ├── start.py                 # 启动/检查脚本
 ├── environment.yml          # Conda 环境定义（含 pandoc）
@@ -171,5 +259,3 @@ markdowm_tomail_server/
 - `python examples/send_email.py`：按示例模板调用 API。
 - `python -m unittest tests.test_create_template`：验证统一脚手架生成结果和可选 AI hook 升级路径。
 - `python -m unittest tests.test_ai_service tests.test_ai_api`：验证 AI 服务层、AI 模板错误映射和蛋白模板的 stub 渲染链路。
-
-

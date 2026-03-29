@@ -7,6 +7,7 @@ import sys
 import time
 import uuid
 from flask import Flask, request, jsonify, g, has_request_context
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # 添加src目录到Python路径
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
@@ -25,6 +26,35 @@ configure_logging(force=True)
 logger = logging.getLogger("app")
 
 app = Flask(__name__)
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None or raw_value.strip() == "":
+        return default
+    try:
+        return int(raw_value)
+    except ValueError:
+        logger.warning("invalid_int_env | name=%s value=%s fallback=%s", name, raw_value, default)
+        return default
+
+
+if _env_bool("ENABLE_PROXY_FIX", True):
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app,
+        x_for=_env_int("PROXY_FIX_X_FOR", 1),
+        x_proto=_env_int("PROXY_FIX_X_PROTO", 1),
+        x_host=_env_int("PROXY_FIX_X_HOST", 1),
+        x_port=_env_int("PROXY_FIX_X_PORT", 1),
+        x_prefix=_env_int("PROXY_FIX_X_PREFIX", 0),
+    )
 
 # 初始化核心组件
 renderer = Renderer()

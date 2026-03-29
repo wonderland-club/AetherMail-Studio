@@ -10,5 +10,6 @@ dependencies:
   - email-validator=2.1.0
   - pip
   - pip:
+      - gunicorn==23.0.0
       - premailer==3.10.0
       - "volcengine-python-sdk[ark]>=4.0.36"
