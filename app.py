@@ -61,6 +61,12 @@ renderer = Renderer()
 template_registry = TemplateRegistry()
 
 
+def external_path(path: str) -> str:
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    prefix = (request.script_root or "").rstrip("/")
+    return f"{prefix}{normalized_path}" if prefix else normalized_path
+
+
 def error_response(message: str, status: int = 400, **extra):
     payload = {"success": False, "error": message}
     if extra:
@@ -106,12 +112,13 @@ def home():
     return jsonify({
         "message": "📧 Markdown邮件发送系统",
         "description": "支持多模板的邮件发送系统（主题由模板定义）",
+        "base_path": request.script_root or "/",
         "endpoints": {
-            "GET /": "显示此帮助信息",
-            "GET /health": "健康检查",
-            "GET /templates": "获取可用模板列表",
-            "GET /smtp-configs": "获取可用SMTP主体列表",
-            "POST /api/send": "发送邮件（统一请求字段）"
+            f"GET {external_path('/')}": "显示此帮助信息",
+            f"GET {external_path('/health')}": "健康检查",
+            f"GET {external_path('/templates')}": "获取可用模板列表",
+            f"GET {external_path('/smtp-configs')}": "获取可用SMTP主体列表",
+            f"POST {external_path('/api/send')}": "发送邮件（统一请求字段）"
         },
         "request_schema": {
             "template": "模板ID (字符串)",
@@ -312,7 +319,13 @@ def not_found(error):
     return jsonify({
         "success": False,
         "error": "API端点不存在",
-        "available_endpoints": ["GET /", "GET /health", "GET /templates", "GET /smtp-configs", "POST /api/send"]
+        "available_endpoints": [
+            f"GET {external_path('/')}",
+            f"GET {external_path('/health')}",
+            f"GET {external_path('/templates')}",
+            f"GET {external_path('/smtp-configs')}",
+            f"POST {external_path('/api/send')}",
+        ]
     }), 404
 
 

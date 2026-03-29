@@ -135,19 +135,37 @@ PROXY_FIX_X_FOR=1
 PROXY_FIX_X_PROTO=1
 PROXY_FIX_X_HOST=1
 PROXY_FIX_X_PORT=1
-PROXY_FIX_X_PREFIX=0
+PROXY_FIX_X_PREFIX=1
 ```
 
 最小 `nginx` 反代示例：
 ```nginx
-location / {
-    proxy_pass http://127.0.0.1:5000;
+location = / {
+    return 302 /aether_mail_studio/;
+}
+
+location = /aether_mail_studio {
+    return 302 /aether_mail_studio/;
+}
+
+location /aether_mail_studio/ {
+    proxy_pass http://127.0.0.1:5000/;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Prefix /aether_mail_studio;
     proxy_read_timeout 180s;
 }
+```
+
+如果你按当前仓库里的部署样板走，公网入口会是：
+```text
+http://115.190.255.162/aether_mail_studio/
+http://115.190.255.162/aether_mail_studio/health
+http://115.190.255.162/aether_mail_studio/templates
+http://115.190.255.162/aether_mail_studio/smtp-configs
+http://115.190.255.162/aether_mail_studio/api/send
 ```
 
 推荐的服务器目录约定：
@@ -172,7 +190,7 @@ pip install -r requirements.txt
 ```
 4. 配置 `.env`，确认 SMTP 和豆包相关变量可用。
 5. 复制 `deploy/systemd/aethermail-studio.service` 到 `/etc/systemd/system/`，按实际路径调整。
-6. 复制 `deploy/nginx/aethermail-studio.conf` 到 `/etc/nginx/sites-available/`，修改 `server_name`。
+6. 复制 `deploy/nginx/aethermail-studio.conf` 到 `/etc/nginx/sites-available/`。当前样板默认使用 `115.190.255.162` 并将应用挂在 `/aether_mail_studio/`。
 7. 启用并启动服务：
 ```bash
 sudo systemctl daemon-reload

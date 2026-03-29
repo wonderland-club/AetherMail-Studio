@@ -10,6 +10,7 @@ WorkingDirectory=/srv/aethermail-studio
 EnvironmentFile=/srv/aethermail-studio/.env
 Environment=PATH=/srv/aethermail-studio/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=PYTHONUNBUFFERED=1
+Environment=PROXY_FIX_X_PREFIX=1
 
 # If you deploy with Conda instead of .venv, replace PATH and ExecStart
 # with the bin directory of your Conda environment.
