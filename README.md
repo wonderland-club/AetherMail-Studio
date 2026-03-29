@@ -171,3 +171,5 @@ markdowm_tomail_server/
 - `python examples/send_email.py`：按示例模板调用 API。
 - `python -m unittest tests.test_create_template`：验证统一脚手架生成结果和可选 AI hook 升级路径。
 - `python -m unittest tests.test_ai_service tests.test_ai_api`：验证 AI 服务层、AI 模板错误映射和蛋白模板的 stub 渲染链路。
+
+
