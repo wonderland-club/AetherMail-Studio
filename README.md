@@ -17,13 +17,13 @@ conda env update -f environment.yml --prune
 DEFAULT_SMTP_NAME=junyan_qq
 SMTP_PROFILES=junyan_qq,huaqing_exmail
 
-SMTP_PROFILE_JUNYAN_QQ_NAME=俊彦 QQ 邮箱
+SMTP_PROFILE_JUNYAN_QQ_NAME=俊俊 QQ 邮箱
 SMTP_PROFILE_JUNYAN_QQ_HOST=smtp.qq.com
 SMTP_PROFILE_JUNYAN_QQ_PORT=465
 SMTP_PROFILE_JUNYAN_QQ_SECURE=ssl
 SMTP_PROFILE_JUNYAN_QQ_USER=your_qq@example.com
 SMTP_PROFILE_JUNYAN_QQ_PASSWORD=your_qq_smtp_password
-SMTP_PROFILE_JUNYAN_QQ_SENDER_NAME=俊彦
+SMTP_PROFILE_JUNYAN_QQ_SENDER_NAME=俊俊
 
 SMTP_PROFILE_HUAQING_EXMAIL_NAME=华清美伦 企业邮
 SMTP_PROFILE_HUAQING_EXMAIL_HOST=smtp.exmail.qq.com
@@ -91,7 +91,7 @@ curl -X POST http://127.0.0.1:5000/api/send \
     "to": "junyan101@qq.com",
     "cc": [],
     "data": {
-      "NAME": "俊彦",
+      "NAME": "俊俊",
       "TOPIC": "验证豆包调用、Markdown 渲染与 SMTP 发送链路"
     }
   }'
@@ -110,6 +110,19 @@ curl -X POST http://127.0.0.1:5000/api/send \
 - 仓库附带了可直接改的样板文件：
   - `deploy/systemd/aethermail-studio.service`
   - `deploy/nginx/aethermail-studio.conf`
+
+`deploy/systemd/aethermail-studio.service` 的作用：
+- 它是 `systemd` 服务单元，用来在服务器上托管 Gunicorn。
+- 它定义了服务用户、工作目录、`.env` 路径和 Gunicorn 启动命令。
+- 配好以后可以用 `systemctl` 统一管理，不需要手动开终端常驻运行。
+- 典型管理命令：
+```bash
+sudo systemctl start aethermail-studio
+sudo systemctl stop aethermail-studio
+sudo systemctl restart aethermail-studio
+sudo systemctl status aethermail-studio
+sudo journalctl -u aethermail-studio -f
+```
 
 启动命令：
 ```bash
@@ -189,7 +202,7 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 4. 配置 `.env`，确认 SMTP 和豆包相关变量可用。
-5. 复制 `deploy/systemd/aethermail-studio.service` 到 `/etc/systemd/system/`，按实际路径调整。
+5. 复制 `deploy/systemd/aethermail-studio.service` 到 `/etc/systemd/system/`，按实际路径调整。这个文件会告诉服务器如何开机启动和守护 Gunicorn。
 6. 复制 `deploy/nginx/aethermail-studio.conf` 到 `/etc/nginx/sites-available/`。当前样板默认使用 `115.190.255.162` 并将应用挂在 `/aether_mail_studio/`。
 7. 启用并启动服务：
 ```bash
@@ -198,6 +211,13 @@ sudo systemctl enable --now aethermail-studio
 sudo ln -sf /etc/nginx/sites-available/aethermail-studio.conf /etc/nginx/sites-enabled/aethermail-studio.conf
 sudo nginx -t
 sudo systemctl reload nginx
+```
+
+常用排查命令：
+```bash
+sudo systemctl status aethermail-studio
+sudo journalctl -u aethermail-studio -n 100
+sudo journalctl -u aethermail-studio -f
 ```
 
 如果你坚持用 Conda 而不是 `.venv`，只需要把 systemd 里的 `PATH` 和 `ExecStart` 改成 Conda 环境对应的 `bin` 路径。
