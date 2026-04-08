@@ -36,7 +36,7 @@ def _maybe_generate_ai_report(payload):
     \"\"\"Optional AI hook.
 
     默认不调用 AI，直接返回空字符串。
-    如需启用，可在这里按需接入 src.ai 中的 DoubaoService / normalize_markdown，
+    如需启用，可在这里按需接入 src.ai 中的 DoubaoSeed16Service / DoubaoSeed18Service / normalize_markdown，
     并返回要注入到 {{&AI_REPORT}} 的 Markdown 文本。
     \"\"\"
     return ""

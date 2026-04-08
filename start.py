@@ -8,6 +8,7 @@ import logging
 import os
 import sys
 import subprocess
+from pathlib import Path
 
 from src.config import load_env
 from src.logging_setup import configure_logging
@@ -79,13 +80,22 @@ def check_env_config():
 def check_template_files():
     """检查模板文件"""
     logger.info("check_template_files")
-    
-    template_file = "templates/advantages/template.md"
-    if not os.path.exists(template_file):
-        logger.error("template_missing | path=%s", template_file)
+
+    templates_root = Path("templates")
+    if not templates_root.exists():
+        logger.error("templates_root_missing | path=%s", templates_root)
         return False
-    
-    logger.info("template_ok | path=%s", template_file)
+
+    template_dirs = sorted(
+        child.name
+        for child in templates_root.iterdir()
+        if child.is_dir() and (child / "template.py").exists() and (child / "template.md").exists()
+    )
+    if not template_dirs:
+        logger.error("template_missing | path=%s", templates_root)
+        return False
+
+    logger.info("template_ok | count=%s templates=%s", len(template_dirs), ",".join(template_dirs))
     return True
 
 def run_tests():

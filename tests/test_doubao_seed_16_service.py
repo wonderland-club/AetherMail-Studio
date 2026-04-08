@@ -1,7 +1,7 @@
 import types
 import unittest
 
-from src.ai import AIConfigurationError, AIProviderError, AIResponseError, DoubaoService, normalize_markdown
+from src.ai import AIConfigurationError, AIProviderError, AIResponseError, DoubaoSeed16Service, normalize_markdown
 
 
 def _build_completion(content):
@@ -31,9 +31,9 @@ class _FakeClient:
         self.chat = _FakeChat(response=response, error=error)
 
 
-class DoubaoServiceTests(unittest.TestCase):
+class DoubaoSeed16ServiceTests(unittest.TestCase):
     def test_generate_structured_json_success(self):
-        service = DoubaoService(
+        service = DoubaoSeed16Service(
             client=_FakeClient(response=_build_completion('{"report_md":"# 标题\\n\\n- 一\\n- 二\\n- 三"}')),
             config={"model_id": "demo-model", "api_key": "demo-key", "base_url": "https://example.com"},
         )
@@ -49,7 +49,7 @@ class DoubaoServiceTests(unittest.TestCase):
         self.assertEqual(result["report_md"], "# 标题\n\n- 一\n- 二\n- 三")
 
     def test_generate_structured_json_empty_response(self):
-        service = DoubaoService(
+        service = DoubaoSeed16Service(
             client=_FakeClient(response=_build_completion("")),
             config={"model_id": "demo-model", "api_key": "demo-key"},
         )
@@ -63,7 +63,7 @@ class DoubaoServiceTests(unittest.TestCase):
             )
 
     def test_generate_structured_json_invalid_json(self):
-        service = DoubaoService(
+        service = DoubaoSeed16Service(
             client=_FakeClient(response=_build_completion("not-json")),
             config={"model_id": "demo-model", "api_key": "demo-key"},
         )
@@ -77,7 +77,7 @@ class DoubaoServiceTests(unittest.TestCase):
             )
 
     def test_generate_structured_json_provider_error(self):
-        service = DoubaoService(
+        service = DoubaoSeed16Service(
             client=_FakeClient(error=RuntimeError("boom")),
             config={"model_id": "demo-model", "api_key": "demo-key"},
         )
@@ -91,7 +91,7 @@ class DoubaoServiceTests(unittest.TestCase):
             )
 
     def test_missing_model_id_raises_configuration_error(self):
-        service = DoubaoService(
+        service = DoubaoSeed16Service(
             client=_FakeClient(response=_build_completion('{"ok":true}')),
             config={"api_key": "demo-key"},
         )

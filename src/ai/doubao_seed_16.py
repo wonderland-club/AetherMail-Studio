@@ -1,4 +1,4 @@
-"""Shared Doubao/Ark client wrapper."""
+"""Shared doubao-seed-1.6 client wrapper."""
 
 from __future__ import annotations
 
@@ -6,27 +6,27 @@ import json
 import logging
 from typing import Any, Dict, Optional
 
-from src.config import get_doubao_config
+from src.config import get_doubao_seed_16_config
 
 from .exceptions import AIConfigurationError, AIProviderError, AIResponseError
 
-logger = logging.getLogger("ai.doubao")
+logger = logging.getLogger("ai.doubao_seed_16")
 
 
-class DoubaoService:
-    """Thin service wrapper around the Ark chat completion API."""
+class DoubaoSeed16Service:
+    """Thin service wrapper around the Ark chat completion API for doubao-seed-1.6."""
 
     def __init__(self, client: Optional[Any] = None, config: Optional[Dict[str, Optional[str]]] = None) -> None:
         self._client = client
         self._config = config
 
     def _get_config(self) -> Dict[str, Optional[str]]:
-        return dict(self._config or get_doubao_config())
+        return dict(self._config or get_doubao_seed_16_config())
 
     def _get_model_id(self) -> str:
         model_id = (self._get_config().get("model_id") or "").strip()
         if not model_id:
-            raise AIConfigurationError("AI 未启用：请在 .env 中配置 DOUBAO_MODEL_ID")
+            raise AIConfigurationError("AI 未启用：请在 .env 中配置 DOUBAO_SEED_16_MODEL_ID")
         return model_id
 
     def _get_client(self) -> Any:
@@ -36,7 +36,7 @@ class DoubaoService:
         config = self._get_config()
         api_key = (config.get("api_key") or "").strip()
         if not api_key:
-            raise AIConfigurationError("AI 未启用：请在 .env 中配置 DOUBAO_API_KEY")
+            raise AIConfigurationError("AI 未启用：请在 .env 中配置 DOUBAO_SEED_16_API_KEY")
 
         try:
             from volcenginesdkarkruntime import Ark
@@ -85,7 +85,7 @@ class DoubaoService:
             },
         }
 
-        logger.info("doubao_request_begin | model_id=%s schema_name=%s", model_id, schema_name)
+        logger.info("doubao_seed_16_request_begin | model_id=%s schema_name=%s", model_id, schema_name)
         try:
             completion = client.chat.completions.create(
                 model=model_id,
@@ -100,7 +100,7 @@ class DoubaoService:
                 extra_headers={"x-is-encrypted": "true"},
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("doubao_request_failed | schema_name=%s error=%s", schema_name, exc)
+            logger.warning("doubao_seed_16_request_failed | schema_name=%s error=%s", schema_name, exc)
             raise AIProviderError(f"AI 调用失败：{exc}") from exc
 
         message = completion.choices[0].message if getattr(completion, "choices", None) else None
@@ -116,5 +116,5 @@ class DoubaoService:
         if not isinstance(data, dict):
             raise AIResponseError("AI 返回结构错误：根节点必须是对象")
 
-        logger.info("doubao_request_ok | schema_name=%s keys=%s", schema_name, ",".join(sorted(data.keys())))
+        logger.info("doubao_seed_16_request_ok | schema_name=%s keys=%s", schema_name, ",".join(sorted(data.keys())))
         return data

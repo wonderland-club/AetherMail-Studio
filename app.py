@@ -128,11 +128,11 @@ def home():
             "smtp_name": "可选，发件SMTP主体标识；省略时使用默认主体"
         },
         "example": {
-            "template": "notification",
+            "template": "basic_test_template",
             "smtp_name": "junyan_qq",
             "to": "user@example.com",
             "cc": ["cc@example.com"],
-            "data": {"MESSAGE": "上线提醒", "CURRENT_TIME": "2024-06-01"}
+            "data": {"MESSAGE": "这是一封普通测试邮件。", "CURRENT_TIME": "2024-06-01"}
         }
     })
 

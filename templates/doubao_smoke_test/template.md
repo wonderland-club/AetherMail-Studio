@@ -1,3 +1,3 @@
-# 写给{{&NAME}}：豆包链路验证邮件
+# 写给{{&NAME}}：doubao-seed-1.6 链路验证邮件
 
 {{&AI_REPORT}}

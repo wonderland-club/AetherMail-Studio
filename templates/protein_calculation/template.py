@@ -1,9 +1,10 @@
-"""蛋白质摄入估算模板（8 模块算法 + 豆包 AI 文案生成）"""
+"""蛋白质摄入估算模板（8 模块算法 + doubao-seed-1.6 AI 文案生成）"""
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
-from src.ai import DoubaoService, normalize_markdown
+from typing import Any, Dict, List, Optional, Tuple
+from src.ai import DoubaoSeed16Service, normalize_markdown
+from src.feishu_bot import FeishuBotClient
 
 
 TEMPLATE_ID = "protein_calculation"
@@ -226,8 +227,84 @@ def _kidney_note(mode: str) -> str:
     return "无肾脏问题"
 
 
-def _maybe_ai_sections(ai_payload: Dict[str, Any], service: Optional[DoubaoService] = None) -> Dict[str, str]:
-    service = service or DoubaoService()
+def _notify_value(value: Any, fallback: str = "未提供") -> str:
+    text = str(value).strip() if value is not None else ""
+    return text or fallback
+
+
+def _protein_key_info_lines(incoming: Dict[str, Any], ai_context: Optional[Dict[str, Any]] = None) -> List[str]:
+    age_value = ai_context.get("age") if ai_context else incoming.get("age")
+    sex_value = ai_context.get("sex") if ai_context else incoming.get("sex")
+    goal_value = ai_context.get("goal") if ai_context else incoming.get("goal")
+    diet_value = ai_context.get("diet_type") if ai_context else incoming.get("diet_type")
+    activity_label = ai_context.get("activity_label") if ai_context else ""
+    activity_value = ai_context.get("activity_level") if ai_context else incoming.get("activity_level")
+    if ai_context:
+        kidney_label = _kidney_note(str(ai_context.get("kidney_mode") or "").lower())
+    else:
+        kidney_label = _kidney_note(
+            _kidney_mode(
+                str(incoming.get("kidney_status") or "").lower(),
+                incoming.get("on_dialysis"),
+            )
+        )
+
+    if not activity_label:
+        activity_label = _ACTIVITY_LABEL.get(str(activity_value or "").lower(), _notify_value(activity_value))
+
+    key_info = (
+        "关键信息："
+        f" 年龄={_notify_value(age_value)},"
+        f" 性别={_sex_text(str(sex_value or '').lower())},"
+        f" 身高={_notify_value(incoming.get('height_cm'))} cm,"
+        f" 体重={_notify_value(incoming.get('weight_kg'))} kg,"
+        f" 活动={activity_label},"
+        f" 目标={_goal_label(str(goal_value or '').lower())},"
+        f" 肾脏={kidney_label},"
+        f" 饮食={_diet_label(str(diet_value or '').lower())}"
+    )
+    return [key_info]
+
+
+def _notify_protein_status(
+    *,
+    success: bool,
+    incoming: Dict[str, Any],
+    ai_context: Optional[Dict[str, Any]] = None,
+    ai_report: str = "",
+    error: Optional[Exception] = None,
+) -> None:
+    status_text = "成功" if success else "失败"
+    name = str(incoming.get("name") or incoming.get("NAME") or "未提供").strip() or "未提供"
+
+    lines = [
+        f"蛋白质模板执行{status_text}",
+        f"用户昵称：{name}",
+    ]
+
+    if success:
+        if ai_context:
+            lines.append(
+                "计算摘要："
+                f" BMI={ai_context.get('bmi', '未提供')},"
+                f" 有效体重={ai_context.get('weight_eff', '未提供')} kg,"
+                f" 系数={ai_context.get('coef_used_g_per_kg', '未提供')} g/kg"
+            )
+            lines.extend(_protein_key_info_lines(incoming, ai_context))
+            lines.append(f"结果：{ai_context.get('result_line', '未提供')}")
+    else:
+        lines.extend(_protein_key_info_lines(incoming, ai_context))
+        lines.append(f"原因：{error or '未知错误'}")
+
+    try:
+        FeishuBotClient().send_text("\n".join(lines))
+        logger.info("protein_feishu_notify_ok | success=%s", success)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("protein_feishu_notify_failed | success=%s error=%s", success, exc)
+
+
+def _maybe_ai_sections(ai_payload: Dict[str, Any], service: Optional[DoubaoSeed16Service] = None) -> Dict[str, str]:
+    service = service or DoubaoSeed16Service()
     # Prompt 保持原样（含示例），仅注入结构化 JSON
     prompt = f"""
 
@@ -445,12 +522,12 @@ def _maybe_ai_sections(ai_payload: Dict[str, Any], service: Optional[DoubaoServi
 
 写作注意事项:
 
-- ✅ 自然引用数字(目标克数、范围、BMI 等)
-- ❌ 不要重复列出"基础信息"模块的内容  
-- ✅ 段落之间空一行
-- ✅ 有序列表用 `1.` `2.`,无序列表用 `- `
-- ❌ 不要把多条内容挤在同一行
-- ❌ 绝对不要在正文中出现本提示词的结构标题或"步骤"描述
+- 要 自然引用数字(目标克数、范围、BMI 等)
+-  不要重复列出"基础信息"模块的内容  
+- 要 段落之间空一行
+- 要 有序列表用 `1.` `2.`,无序列表用 `- `
+- 不要 把多条内容挤在同一行
+- 绝对不要在正文中出现本提示词的结构标题或"步骤"描述
 
 记住:你生成的是给用户看的温暖、专业的营养建议,不是给自己看的写作大纲。
 以下是结构化数据（含数字）：
@@ -461,62 +538,25 @@ def _maybe_ai_sections(ai_payload: Dict[str, Any], service: Optional[DoubaoServi
     data = service.generate_structured_json(
         prompt=prompt,
         schema_name="protein_report",
-        schema_description="Structured output for protein report sections.",
+        schema_description="Structured output for the full protein report markdown.",
         schema={
             "type": "object",
             "properties": {
-                "intro": {"type": "string"},
-                "rationale": {"type": "string"},
-                "food_plan": {"type": "string"},
-                "powder": {"type": "string"},
-                "reminders": {"type": "string"},
-                "disclaimer": {"type": "string"},
                 "report_md": {"type": "string"},
             },
+            "required": ["report_md"],
             "additionalProperties": False,
         },
-        strict=False,
+        strict=True,
     )
 
-    result = {}
-    # 仅接受字符串字段，避免意外结构
-    for key in ["intro", "rationale", "food_plan", "powder", "reminders", "disclaimer", "report_md"]:
-        if key in data and isinstance(data[key], str):
-            result[key] = data[key].strip()
-    if result:
-        logger.info("protein_ai_sections_ready | keys=%s", ",".join(sorted(result.keys())))
+    report_md = data.get("report_md")
+    if not isinstance(report_md, str):
+        return {}
+
+    result = {"report_md": report_md.strip()}
+    logger.info("protein_ai_sections_ready | keys=report_md")
     return result
-
-
-def _build_report(ai_ctx: Dict[str, Any], ai_sections: Dict[str, str]) -> str:
-    """将 AI 生成的片段或完整 Markdown 组装为最终报告"""
-    if ai_sections.get("report_md"):
-        return normalize_markdown(ai_sections["report_md"])
-
-    # 未提供完整 report_md 时，按分段字段拼装
-    intro = ai_sections.get("intro", "").strip()
-    rationale = ai_sections.get("rationale", "").strip()
-    food_plan = ai_sections.get("food_plan", "").strip()
-    powder = ai_sections.get("powder", "").strip()
-    reminders = ai_sections.get("reminders", "").strip()
-    disclaimer = ai_sections.get("disclaimer", "").strip()
-
-    parts = []
-    if intro:
-        parts.append("## 开场 & 正反馈\n" + intro)
-    parts.append("## 核心结论一句话\n" + ai_ctx.get("core_line", ""))
-    if rationale:
-        parts.append("## 为什么是这个数字\n" + rationale)
-    if food_plan:
-        parts.append("## 怎么吃出来（食物换算与示例）\n" + food_plan)
-    if powder:
-        parts.append("## 蛋白粉要不要\n" + powder)
-    if reminders:
-        parts.append("## 个性化提醒\n" + reminders)
-    if disclaimer:
-        parts.append("## 收尾 & 免责声明\n" + disclaimer)
-
-    return normalize_markdown("\n\n".join([p for p in parts if p]).strip())
 
 
 def render(data: Dict[str, Any], renderer):
@@ -525,183 +565,186 @@ def render(data: Dict[str, Any], renderer):
     md_text = md_path.read_text(encoding="utf-8")
 
     incoming = dict(data or {})
-    # 基础校验与数值转换
-    weight_kg = _to_float(incoming.get("weight_kg"))
-    height_cm = _to_float(incoming.get("height_cm"))
-    if weight_kg is None or height_cm is None:
-        raise ValueError("缺少模板变量: weight_kg 或 height_cm")
-    if weight_kg <= 0 or height_cm <= 0:
-        raise ValueError("请提供有效的身高和体重")
+    ai_context: Optional[Dict[str, Any]] = None
+    try:
+        # 基础校验与数值转换
+        weight_kg = _to_float(incoming.get("weight_kg"))
+        height_cm = _to_float(incoming.get("height_cm"))
+        if weight_kg is None or height_cm is None:
+            raise ValueError("缺少模板变量: weight_kg 或 height_cm")
+        if weight_kg <= 0 or height_cm <= 0:
+            raise ValueError("请提供有效的身高和体重")
 
-    age = _to_int(incoming.get("age"))
-    sex = (incoming.get("sex") or "").lower()
-    activity_level = (incoming.get("activity_level") or "").lower()
-    goal = (incoming.get("goal") or "").lower() or "maintain"
-    kidney_status = (incoming.get("kidney_status") or "").lower()
-    on_dialysis = incoming.get("on_dialysis")
-    female_stage = (incoming.get("female_stage") or "none").lower()
-    preg_trimester = incoming.get("preg_trimester") or ""
-    lact_stage = incoming.get("lact_stage") or ""
-    diet_type = (incoming.get("diet_type") or "").lower()
+        age = _to_int(incoming.get("age"))
+        sex = (incoming.get("sex") or "").lower()
+        activity_level = (incoming.get("activity_level") or "").lower()
+        goal = (incoming.get("goal") or "").lower() or "maintain"
+        kidney_status = (incoming.get("kidney_status") or "").lower()
+        on_dialysis = incoming.get("on_dialysis")
+        female_stage = (incoming.get("female_stage") or "none").lower()
+        preg_trimester = incoming.get("preg_trimester") or ""
+        lact_stage = incoming.get("lact_stage") or ""
+        diet_type = (incoming.get("diet_type") or "").lower()
 
-    height_m, bmi, weight_eff, weight_ideal, weight_note = _calc_weight_eff(height_cm, weight_kg)
-    coef_base = _coef_base(age)
-    k_activity, coef_after_act, activity_label = _apply_activity(coef_base, activity_level)
-    coef_goal = _adjust_by_goal(coef_after_act, goal)
-    kidney_mode = _kidney_mode(kidney_status, on_dialysis)
-    coef_kidney = _adjust_by_kidney(coef_goal, kidney_mode)
-    extra_preg_lact_g = _extra_preg_lact(sex, female_stage, preg_trimester, lact_stage, kidney_mode)
-    coef_min, coef_max = _coef_limits(kidney_mode, age)
+        height_m, bmi, weight_eff, weight_ideal, weight_note = _calc_weight_eff(height_cm, weight_kg)
+        coef_base = _coef_base(age)
+        k_activity, coef_after_act, activity_label = _apply_activity(coef_base, activity_level)
+        coef_goal = _adjust_by_goal(coef_after_act, goal)
+        kidney_mode = _kidney_mode(kidney_status, on_dialysis)
+        coef_kidney = _adjust_by_kidney(coef_goal, kidney_mode)
+        extra_preg_lact_g = _extra_preg_lact(sex, female_stage, preg_trimester, lact_stage, kidney_mode)
+        coef_min, coef_max = _coef_limits(kidney_mode, age)
 
-    prot_base_target_g = coef_kidney * weight_eff
-    prot_target_raw_g = prot_base_target_g + extra_preg_lact_g
-    prot_min_g = coef_min * weight_eff + extra_preg_lact_g
-    prot_max_g = coef_max * weight_eff + extra_preg_lact_g
-    prot_target_g = min(prot_target_raw_g, prot_max_g)
+        prot_base_target_g = coef_kidney * weight_eff
+        prot_target_raw_g = prot_base_target_g + extra_preg_lact_g
+        prot_min_g = coef_min * weight_eff + extra_preg_lact_g
+        prot_max_g = coef_max * weight_eff + extra_preg_lact_g
+        prot_target_g = min(prot_target_raw_g, prot_max_g)
 
-    X = round(prot_target_g)
-    Y = round(prot_min_g)
-    Z = round(prot_max_g)
+        X = round(prot_target_g)
+        Y = round(prot_min_g)
+        Z = round(prot_max_g)
 
-    kidney_text = _kidney_note(kidney_mode)
-    core_line = f"综合你的信息，建议每天摄入约 {X} 克蛋白质，合理范围在 {Y}–{Z} 克之间。"
-    range_line = (
-        f"参考范围：{Y}–{Z} g/天（系数 {coef_min:.2f}–{coef_max:.2f} g/kg，"
-        f"有效体重 {weight_eff:.1f} kg）。"
-    )
-    result_line = (
-        f"建议每日蛋白质约 {X} g（范围 {Y}–{Z} g/天，"
-        f"折算系数 {coef_kidney:.2f} g/kg，已按肾功能/目标/活动综合考虑）。"
-    )
+        kidney_text = _kidney_note(kidney_mode)
+        core_line = f"综合你的信息，建议每天摄入约 {X} 克蛋白质，合理范围在 {Y}–{Z} 克之间。"
+        range_line = (
+            f"参考范围：{Y}–{Z} g/天（系数 {coef_min:.2f}–{coef_max:.2f} g/kg，"
+            f"有效体重 {weight_eff:.1f} kg）。"
+        )
+        result_line = (
+            f"建议每日蛋白质约 {X} g（范围 {Y}–{Z} g/天，"
+            f"折算系数 {coef_kidney:.2f} g/kg，已按肾功能/目标/活动综合考虑）。"
+        )
 
-    ai_context = {
-        "name": incoming.get("name") or "朋友",
-        "age": age,
-        "sex": sex or "未提供",
-        "female_stage": female_stage or "none",
-        "preg_trimester": preg_trimester or "未提供",
-        "lact_stage": lact_stage or "未提供",
-        "height_cm": round(height_cm, 1),
-        "weight_kg": round(weight_kg, 1),
-        "bmi": round(bmi, 1),
-        "weight_eff": round(weight_eff, 1),
-        "weight_note": weight_note,
-        "activity_level": activity_level or "moderate",
-        "activity_label": activity_label,
-        "goal": goal,
-        "goal_label": _goal_label(goal),
-        "diet_type": diet_type or "omnivore",
-        "kidney_mode": kidney_mode,
-        "kidney_note": kidney_text,
-        "coef_used_g_per_kg": round(coef_kidney, 2),
-        "coef_min": round(coef_min, 2),
-        "coef_max": round(coef_max, 2),
-        "extra_preg_lact_g": round(extra_preg_lact_g, 1),
-        "protein_target_g": X,
-        "protein_min_g": Y,
-        "protein_max_g": Z,
-        "prot_base_target_g": round(prot_base_target_g, 1),
-        "prot_target_raw_g": round(prot_target_raw_g, 1),
-        "range_line": range_line,
-        "result_line": result_line,
-        "core_line": core_line,
-    }
-
-    # 发送给豆包的结构化 JSON，便于提示词引用
-    ai_payload = {
-        "user": {
-            "name": ai_context["name"],
+        ai_context = {
+            "name": incoming.get("name") or "朋友",
             "age": age,
-            "sex": sex,
-            "female_stage": female_stage,
-            "preg_trimester": preg_trimester or "",
-            "lact_stage": lact_stage or "",
-            "diet_type": diet_type or "omnivore",
-            "goal": goal,
-            "goal_label": _goal_label(goal),
-            "activity_level": activity_level or "moderate",
-            "activity_label": activity_label,
-            "kidney_mode": kidney_mode,
-        },
-        "metrics": {
-            "height_cm": float(height_cm),
-            "weight_kg": float(weight_kg),
+            "sex": sex or "未提供",
+            "female_stage": female_stage or "none",
+            "preg_trimester": preg_trimester or "未提供",
+            "lact_stage": lact_stage or "未提供",
+            "height_cm": round(height_cm, 1),
+            "weight_kg": round(weight_kg, 1),
             "bmi": round(bmi, 1),
             "weight_eff": round(weight_eff, 1),
             "weight_note": weight_note,
-        },
-        "coefficients": {
-            "coef_base": round(coef_base, 2),
-            "k_activity": round(k_activity, 2),
-            "coef_after_act": round(coef_after_act, 2),
-            "coef_goal": round(coef_goal, 2),
+            "activity_level": activity_level or "moderate",
+            "activity_label": activity_label,
+            "goal": goal,
+            "goal_label": _goal_label(goal),
+            "diet_type": diet_type or "omnivore",
+            "kidney_mode": kidney_mode,
+            "kidney_note": kidney_text,
             "coef_used_g_per_kg": round(coef_kidney, 2),
             "coef_min": round(coef_min, 2),
             "coef_max": round(coef_max, 2),
-        },
-        "protein_plan": {
+            "extra_preg_lact_g": round(extra_preg_lact_g, 1),
             "protein_target_g": X,
             "protein_min_g": Y,
             "protein_max_g": Z,
             "prot_base_target_g": round(prot_base_target_g, 1),
             "prot_target_raw_g": round(prot_target_raw_g, 1),
-            "extra_preg_lact_g": round(extra_preg_lact_g, 1),
-        },
-        "phrases": {
-            "core_line": core_line,
             "range_line": range_line,
             "result_line": result_line,
-        },
-    }
+            "core_line": core_line,
+        }
 
-    # AI 生成文案，未返回则直接报错
-    ai_sections = _maybe_ai_sections(ai_payload)
-    if not ai_sections:
-        raise RuntimeError("AI 未返回内容，请检查 ARK 配置或模型输出")
-    ai_report = _build_report(ai_context, ai_sections)
-    if not ai_report:
-        raise RuntimeError("AI 文案为空，无法渲染报告")
+        ai_payload = {
+            "user": {
+                "name": ai_context["name"],
+                "age": age,
+                "sex": sex,
+                "female_stage": female_stage,
+                "preg_trimester": preg_trimester or "",
+                "lact_stage": lact_stage or "",
+                "diet_type": diet_type or "omnivore",
+                "goal": goal,
+                "goal_label": _goal_label(goal),
+                "activity_level": activity_level or "moderate",
+                "activity_label": activity_label,
+                "kidney_mode": kidney_mode,
+            },
+            "metrics": {
+                "height_cm": float(height_cm),
+                "weight_kg": float(weight_kg),
+                "bmi": round(bmi, 1),
+                "weight_eff": round(weight_eff, 1),
+                "weight_note": weight_note,
+            },
+            "coefficients": {
+                "coef_base": round(coef_base, 2),
+                "k_activity": round(k_activity, 2),
+                "coef_after_act": round(coef_after_act, 2),
+                "coef_goal": round(coef_goal, 2),
+                "coef_used_g_per_kg": round(coef_kidney, 2),
+                "coef_min": round(coef_min, 2),
+                "coef_max": round(coef_max, 2),
+            },
+            "protein_plan": {
+                "protein_target_g": X,
+                "protein_min_g": Y,
+                "protein_max_g": Z,
+                "prot_base_target_g": round(prot_base_target_g, 1),
+                "prot_target_raw_g": round(prot_target_raw_g, 1),
+                "extra_preg_lact_g": round(extra_preg_lact_g, 1),
+            },
+            "phrases": {
+                "core_line": core_line,
+                "range_line": range_line,
+                "result_line": result_line,
+            },
+        }
 
-    payload: Dict[str, Any] = {
-        "NAME": ai_context["name"],
-        "AGE_TEXT": f"{age} 岁" if age is not None else "未提供",
-        "AGE": str(age) if age is not None else "未提供",
-        "SEX": sex or "未提供",
-        "SEX_TEXT": _sex_text(sex),
-        "FEMALE_STAGE": female_stage or "none",
-        "PREG_TRIMESTER": preg_trimester or "未提供",
-        "LACT_STAGE": lact_stage or "未提供",
-        "HEIGHT_CM": f"{height_cm:.1f}",
-        "WEIGHT_KG": f"{weight_kg:.1f}",
-        "BMI": f"{bmi:.1f}",
-        "WEIGHT_EFF": f"{weight_eff:.1f}",
-        "WEIGHT_EFF_NOTE": weight_note,
-        "ACTIVITY_LEVEL": activity_level or "moderate",
-        "ACTIVITY_LABEL": activity_label,
-        "GOAL": goal or "maintain",
-        "GOAL_LABEL": _goal_label(goal),
-        "DIET_TYPE": diet_type or "omnivore",
-        "DIET_LABEL": _diet_label(diet_type),
-        "KIDNEY_MODE": kidney_mode,
-        "KIDNEY_NOTE": kidney_text,
-        "NOTE_PREG_LACT": _preg_lact_note(sex, female_stage, preg_trimester, lact_stage),
-        "COEF_BASE": f"{coef_base:.2f}",
-        "K_ACTIVITY": f"{k_activity:.2f}",
-        "COEF_AFTER_ACT": f"{coef_after_act:.2f}",
-        "COEF_GOAL": f"{coef_goal:.2f}",
-        "COEF_USED_G_PER_KG": f"{coef_kidney:.2f}",
-        "EXTRA_PREG_LACT_G": f"{extra_preg_lact_g:.1f}",
-        "COEF_MIN": f"{coef_min:.2f}",
-        "COEF_MAX": f"{coef_max:.2f}",
-        "PROT_BASE_TARGET_G": f"{prot_base_target_g:.1f}",
-        "PROT_TARGET_RAW_G": f"{prot_target_raw_g:.1f}",
-        "PROTEIN_MIN_G": f"{Y}",
-        "PROTEIN_MAX_G": f"{Z}",
-        "PROTEIN_TARGET_G": f"{X}",
-        "RESULT_LINE": result_line,
-        "RANGE_LINE": range_line,
-        "CORE_LINE": core_line,
-        "AI_REPORT": ai_report,
-    }
+        ai_sections = _maybe_ai_sections(ai_payload)
+        ai_report = normalize_markdown((ai_sections.get("report_md") or "").strip())
+        if not ai_report:
+            raise RuntimeError("AI 未返回完整 report_md，无法渲染报告")
 
-    return renderer.render(md_text, payload)
+        payload: Dict[str, Any] = {
+            "NAME": ai_context["name"],
+            "AGE_TEXT": f"{age} 岁" if age is not None else "未提供",
+            "AGE": str(age) if age is not None else "未提供",
+            "SEX": sex or "未提供",
+            "SEX_TEXT": _sex_text(sex),
+            "FEMALE_STAGE": female_stage or "none",
+            "PREG_TRIMESTER": preg_trimester or "未提供",
+            "LACT_STAGE": lact_stage or "未提供",
+            "HEIGHT_CM": f"{height_cm:.1f}",
+            "WEIGHT_KG": f"{weight_kg:.1f}",
+            "BMI": f"{bmi:.1f}",
+            "WEIGHT_EFF": f"{weight_eff:.1f}",
+            "WEIGHT_EFF_NOTE": weight_note,
+            "ACTIVITY_LEVEL": activity_level or "moderate",
+            "ACTIVITY_LABEL": activity_label,
+            "GOAL": goal or "maintain",
+            "GOAL_LABEL": _goal_label(goal),
+            "DIET_TYPE": diet_type or "omnivore",
+            "DIET_LABEL": _diet_label(diet_type),
+            "KIDNEY_MODE": kidney_mode,
+            "KIDNEY_NOTE": kidney_text,
+            "NOTE_PREG_LACT": _preg_lact_note(sex, female_stage, preg_trimester, lact_stage),
+            "COEF_BASE": f"{coef_base:.2f}",
+            "K_ACTIVITY": f"{k_activity:.2f}",
+            "COEF_AFTER_ACT": f"{coef_after_act:.2f}",
+            "COEF_GOAL": f"{coef_goal:.2f}",
+            "COEF_USED_G_PER_KG": f"{coef_kidney:.2f}",
+            "EXTRA_PREG_LACT_G": f"{extra_preg_lact_g:.1f}",
+            "COEF_MIN": f"{coef_min:.2f}",
+            "COEF_MAX": f"{coef_max:.2f}",
+            "PROT_BASE_TARGET_G": f"{prot_base_target_g:.1f}",
+            "PROT_TARGET_RAW_G": f"{prot_target_raw_g:.1f}",
+            "PROTEIN_MIN_G": f"{Y}",
+            "PROTEIN_MAX_G": f"{Z}",
+            "PROTEIN_TARGET_G": f"{X}",
+            "RESULT_LINE": result_line,
+            "RANGE_LINE": range_line,
+            "CORE_LINE": core_line,
+            "AI_REPORT": ai_report,
+        }
+
+        rendered_markdown = renderer.render(md_text, payload)
+        _notify_protein_status(success=True, incoming=incoming, ai_context=ai_context, ai_report=rendered_markdown)
+        return rendered_markdown
+    except Exception as exc:
+        _notify_protein_status(success=False, incoming=incoming, ai_context=ai_context, error=exc)
+        raise

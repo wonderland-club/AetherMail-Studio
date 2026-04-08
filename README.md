@@ -67,20 +67,20 @@ python create_template.py --template-id demo_notice --subject "测试主题" --d
 命令会默认创建 `template.py`、`template.md` 以及 `attachments/slot1~3/`。  
 完整模板规范、可选 AI hook 写法和维护矩阵见 [templates/新增模板说明.md](/Users/schen/Documents/MyProjects/AetherMail-Studio/templates/%E6%96%B0%E5%A2%9E%E6%A8%A1%E6%9D%BF%E8%AF%B4%E6%98%8E.md)。
 
-6) 试发一封（示例模板 `notification`）  
+6) 试发一封（示例模板 `basic_test_template`）  
 ```bash
 curl -X POST http://127.0.0.1:5000/api/send \
   -H "Content-Type: application/json" \
   -d '{
-    "template": "notification",
+    "template": "basic_test_template",
     "smtp_name": "junyan_qq",
     "to": "user@example.com",
     "cc": [],
-    "data": {"MESSAGE": "上线提醒", "CURRENT_TIME": "2024-06-01 12:00"}
+    "data": {"MESSAGE": "这是一封普通测试邮件。", "CURRENT_TIME": "2024-06-01 12:00"}
   }'
 ```
 
-7) 验证真实豆包链路（推荐先发给当前 SMTP 主体自己的邮箱）  
+7) 验证真实 `doubao-seed-1.6` 链路（推荐先发给当前 SMTP 主体自己的邮箱）  
 以 `junyan_qq` 为例，`to` 直接填该主体自己的邮箱：
 ```bash
 curl -X POST http://127.0.0.1:5000/api/send \
@@ -92,10 +92,49 @@ curl -X POST http://127.0.0.1:5000/api/send \
     "cc": [],
     "data": {
       "NAME": "俊俊",
-      "TOPIC": "验证豆包调用、Markdown 渲染与 SMTP 发送链路"
+      "TOPIC": "验证 doubao-seed-1.6 调用、Markdown 渲染与 SMTP 发送链路"
     }
   }'
 ```
+
+## AI 封装
+- `src/ai/doubao_seed_16.py` 中的 `DoubaoSeed16Service` 对应 `doubao-seed-1.6`，当前蛋白模板和 smoke test 模板都走 `chat.completions.create(...)`。
+- `src/ai/doubao_seed_18.py` 中的 `DoubaoSeed18Service` 对应 `doubao-seed-1.8`，保留给后续新模板走 `responses.create(...)`。
+- `doubao-seed-1.8` 服务默认使用 `text.format = json_schema` 做结构化输出。
+
+推荐在 `.env` 中补充：
+```env
+DOUBAO_SEED_16_API_KEY=your_doubao_seed_16_api_key
+DOUBAO_SEED_16_MODEL_ID=your_doubao_seed_16_model_id
+DOUBAO_SEED_16_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+
+DOUBAO_SEED_18_API_KEY=your_doubao_seed_18_api_key
+DOUBAO_SEED_18_MODEL_ID=ep-20260408145311-52p8f
+DOUBAO_SEED_18_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+```
+
+最小调用示例：
+```python
+from src.ai import DoubaoSeed18Service
+
+service = DoubaoSeed18Service()
+result = service.generate_structured_json(
+    prompt="请输出一个简短问候",
+    schema_name="greeting",
+    schema_description="Simple greeting payload",
+    schema={
+        "type": "object",
+        "properties": {
+            "message": {"type": "string"},
+        },
+        "required": ["message"],
+        "additionalProperties": False,
+    },
+)
+print(result["message"])
+```
+
+如果需要多模态输入，可直接传 `input=`，结构保持 Ark Responses API 原生格式不变。
 
 ## 📦 Conda 环境
 - `environment.yml` 固定 Python 3.10，并预装 `flask`、`pypandoc`、`pandoc`、`python-dotenv`、`email-validator`，其余（如 `gunicorn`、`premailer`、`volcengine-python-sdk[ark]`）通过 pip 安装。  
@@ -201,7 +240,7 @@ python3 -m venv .venv
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
-4. 配置 `.env`，确认 SMTP 和豆包相关变量可用。
+4. 配置 `.env`，确认 SMTP 和 AI 相关变量可用。
 5. 复制 `deploy/systemd/aethermail-studio.service` 到 `/etc/systemd/system/`，按实际路径调整。这个文件会告诉服务器如何开机启动和守护 Gunicorn。
 6. 复制 `deploy/nginx/aethermail-studio.conf` 到 `/etc/nginx/sites-available/`。当前样板默认使用 `115.190.255.162` 并将应用挂在 `/aether_mail_studio/`。
 7. 启用并启动服务：
@@ -244,9 +283,9 @@ sudo journalctl -u aethermail-studio -f
 {
   "success": true,
   "message": "邮件发送成功",
-  "template": "notification",
+  "template": "basic_test_template",
   "smtp_name": "junyan_qq",
-  "subject": "服务上线通知",
+  "subject": "普通测试邮件",
   "recipient": "user@example.com",
   "cc": []
 }
@@ -263,16 +302,13 @@ markdowm_tomail_server/
 ├── environment.yml          # Conda 环境定义（含 pandoc）
 ├── requirements.txt         # pip 依赖（如需与 Conda 同步参考）
 ├── templates/               # 模板目录（每个模板一个子目录）
-│   ├── advantages/
-│   │   ├── template.md
-│   │   └── template.py
-│   ├── notification/
+│   ├── basic_test_template/
 │   │   ├── template.md
 │   │   └── template.py
 │   ├── doubao_smoke_test/   # 最小 AI 验证模板
 │   └── protein_calculation/…
 ├── src/
-│   ├── ai/                  # 豆包服务层、AI异常、Markdown标准化
+│   ├── ai/                  # doubao-seed-1.6 / 1.8 服务层、AI异常、Markdown标准化
 │   ├── core/
 │   │   ├── renderer.py      # 处理 {{&VAR}} 占位符
 │   │   └── template_registry.py
@@ -281,7 +317,8 @@ markdowm_tomail_server/
 │   └── utils/
 │       └── email_validator.py
 ├── tests/
-│   ├── test_ai_service.py   # AI 服务层单测
+│   ├── test_doubao_seed_16_service.py   # doubao-seed-1.6 服务层单测
+│   ├── test_doubao_seed_18_service.py   # doubao-seed-1.8 服务层单测
 │   └── test_ai_api.py       # AI 模板接口与错误映射单测
 ├── test_smtp.py             # SMTP 连通性测试
 └── examples/send_email.py   # API 调用示例
@@ -296,4 +333,4 @@ markdowm_tomail_server/
 - `python test_smtp.py --smtp-name huaqing_exmail`：验证指定 SMTP 主体连通性。  
 - `python examples/send_email.py`：按示例模板调用 API。
 - `python -m unittest tests.test_create_template`：验证统一脚手架生成结果和可选 AI hook 升级路径。
-- `python -m unittest tests.test_ai_service tests.test_ai_api`：验证 AI 服务层、AI 模板错误映射和蛋白模板的 stub 渲染链路。
+- `python -m unittest tests.test_doubao_seed_16_service tests.test_doubao_seed_18_service tests.test_ai_api`：验证 AI 服务层、AI 模板错误映射和蛋白模板的 stub 渲染链路。

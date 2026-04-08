@@ -77,14 +77,11 @@ def main():
     recipient = "junyan101@qq.com"  # 请替换为真实收件人
     print(f"\n3. 开始发送邮件到: {recipient}")
 
-    # 发送优点清单（无占位符）
-    send_email_with_template("advantages", recipient, smtp_name="junyan_qq")
-
-    # 发送通知模板（包含占位符）
+    # 发送普通测试模板（包含占位符）
     send_email_with_template(
-        "notification",
+        "basic_test_template",
         recipient,
-        data={"MESSAGE": "上线提醒", "CURRENT_TIME": "2024-06-01 12:00"},
+        data={"MESSAGE": "这是一封普通测试邮件，用来验证基础模板链路。", "CURRENT_TIME": "2024-06-01 12:00"},
         smtp_name="junyan_qq",
     )
 

@@ -56,18 +56,31 @@ def get_service_config(service: str, defaults: Optional[Dict[str, Optional[str]]
     return config
 
 
-def get_doubao_config() -> Dict[str, Optional[str]]:
+def get_doubao_seed_16_config() -> Dict[str, Optional[str]]:
     defaults = {
         "api_key": None,
         "model_id": None,
         "base_url": "https://ark.cn-beijing.volces.com/api/v3",
     }
-    config = get_service_config("DOUBAO", defaults)
-    legacy = get_service_config("ARK", defaults)
-    for key, value in legacy.items():
-        if not config.get(key) and value:
-            config[key] = value
-    return config
+    return get_service_config("DOUBAO_SEED_16", defaults)
+
+
+def get_doubao_seed_18_config() -> Dict[str, Optional[str]]:
+    defaults = {
+        "api_key": None,
+        "model_id": None,
+        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+    }
+    return get_service_config("DOUBAO_SEED_18", defaults)
+
+
+def get_feishu_bot_config() -> Dict[str, Optional[str]]:
+    defaults = {
+        "webhook_url": None,
+        "secret": None,
+        "timeout_seconds": "10",
+    }
+    return get_service_config("FEISHU_BOT", defaults)
 
 load_env()
 
